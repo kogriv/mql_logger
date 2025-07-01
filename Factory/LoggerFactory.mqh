@@ -165,8 +165,9 @@ CLogger* CLoggerFactory::FindLogger(string name)
 {
    for(int i = 0; i < s_loggers.Total(); i++)
    {
-      CLogger* logger = s_loggers.At(i);
-      if(logger != NULL && logger.Name() == name)
+      CObject* obj = s_loggers.At(i);
+      CLogger* logger = dynamic_cast<CLogger*>(obj);
+      if(logger != NULL && StringCompare(logger.Name(), name) == 0)
       {
          return logger;
       }
@@ -181,7 +182,7 @@ void CLoggerFactory::RegisterLogger(CLogger* logger)
 {
    if(logger != NULL)
    {
-      s_loggers.Add(logger);
+      s_loggers.Add((CObject*)logger);
    }
 }
 
@@ -573,7 +574,8 @@ void CLoggerFactory::FlushAll()
 {
    for(int i = 0; i < s_loggers.Total(); i++)
    {
-      CLogger* logger = s_loggers.At(i);
+      CObject* obj = s_loggers.At(i);
+      CLogger* logger = dynamic_cast<CLogger*>(obj);
       if(logger != NULL)
       {
          logger.Flush();
@@ -588,7 +590,8 @@ void CLoggerFactory::SetGlobalLevel(ENUM_LOG_LEVEL level)
 {
    for(int i = 0; i < s_loggers.Total(); i++)
    {
-      CLogger* logger = s_loggers.At(i);
+      CObject* obj = s_loggers.At(i);
+      CLogger* logger = dynamic_cast<CLogger*>(obj);
       if(logger != NULL)
       {
          logger.SetLevel(level);
@@ -603,7 +606,8 @@ void CLoggerFactory::EnableAll(bool enabled)
 {
    for(int i = 0; i < s_loggers.Total(); i++)
    {
-      CLogger* logger = s_loggers.At(i);
+      CObject* obj = s_loggers.At(i);
+      CLogger* logger = dynamic_cast<CLogger*>(obj);
       if(logger != NULL)
       {
          logger.Enable(enabled);
@@ -638,8 +642,9 @@ void CLoggerFactory::RemoveLogger(string name)
 {
    for(int i = 0; i < s_loggers.Total(); i++)
    {
-      CLogger* logger = s_loggers.At(i);
-      if(logger != NULL && logger.Name() == name)
+      CObject* obj = s_loggers.At(i);
+      CLogger* logger = dynamic_cast<CLogger*>(obj);
+      if(logger != NULL && StringCompare(logger.Name(), name) == 0)
       {
          s_loggers.Delete(i);
          break;

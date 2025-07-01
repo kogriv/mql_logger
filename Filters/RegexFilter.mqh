@@ -365,6 +365,8 @@ string CRegexFilter::PrepareText(string text, bool case_sensitive)
    }
    else
    {
-      return StringLower(text);
+      string result = text;
+      StringToLower(result);  // Исправлено: StringLower -> StringToLower
+      return result;
    }
 }

@@ -153,7 +153,8 @@ bool CFileHandler::WriteToFile(string message)
    if(m_auto_flush)
    {
       // Direct write
-      if(FileWrite(m_file_handle, message) < 0)
+      uint bytes_written = FileWrite(m_file_handle, message);
+      if(bytes_written == 0)
       {
          PrintFormat("Failed to write to log file: %s, Error: %d", m_filename, GetLastError());
          return false;
@@ -183,7 +184,8 @@ void CFileHandler::FlushBuffer()
 {
    if(m_file_handle != INVALID_HANDLE && StringLen(m_buffer) > 0)
    {
-      if(FileWriteString(m_file_handle, m_buffer) < 0)
+      uint bytes_written = FileWriteString(m_file_handle, m_buffer);
+      if(bytes_written == 0)
       {
          PrintFormat("Failed to flush buffer to log file: %s, Error: %d", m_filename, GetLastError());
       }
@@ -204,8 +206,8 @@ bool CFileHandler::CheckFileSize()
    if(m_max_file_size <= 0)
       return true;
    
-   long file_size = FileSize(m_file_handle);
-   if(file_size >= m_max_file_size)
+   ulong file_size = FileSize(m_file_handle);
+   if(file_size >= (ulong)m_max_file_size)
    {
       // File is too large, need to rotate
       CloseFile();
@@ -214,7 +216,7 @@ bool CFileHandler::CheckFileSize()
       string rotated_name = GenerateRotatedFilename();
       
       // Move current file to rotated name
-      if(!FileMove(m_filename, rotated_name, FILE_REWRITE))
+      if(!FileMove(m_filename, 0, rotated_name, FILE_REWRITE))
       {
          PrintFormat("Failed to rotate log file from %s to %s, Error: %d", 
                     m_filename, rotated_name, GetLastError());

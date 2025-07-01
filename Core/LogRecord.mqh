@@ -43,7 +43,8 @@ string LogLevelToString(ENUM_LOG_LEVEL level)
 //+------------------------------------------------------------------+
 ENUM_LOG_LEVEL StringToLogLevel(string level_str)
 {
-   string upper_str = StringUpper(level_str);
+   string upper_str = level_str;
+   StringToUpper(upper_str);  // Исправлено: StringUpper -> StringToUpper
    
    if(upper_str == "TRACE") return LOG_TRACE;
    if(upper_str == "DEBUG") return LOG_DEBUG;
@@ -70,29 +71,34 @@ struct SLogRecord
    int               thread_id;       // Thread ID (0 for MQL5)
    int               error_code;      // Error code (if any)
    
-   // Constructor
-   SLogRecord() : level(LOG_INFO), 
-                  timestamp(TimeCurrent()), 
-                  logger_name(""),
-                  message(""),
-                  source_file(""),
-                  source_line(0),
-                  function_name(""),
-                  thread_id(0),
-                  error_code(0) {}
+   // Default constructor
+   SLogRecord()
+   {
+      level = (ENUM_LOG_LEVEL)2;  // LOG_INFO = 2
+      timestamp = TimeCurrent();
+      logger_name = "";
+      message = "";
+      source_file = "";
+      source_line = 0;
+      function_name = "";
+      thread_id = 0;
+      error_code = 0;
+   }
                   
    // Constructor with parameters
    SLogRecord(ENUM_LOG_LEVEL lvl, string msg, string logger = "", 
-              string file = "", int line = 0, string func = "", int err = 0) :
-              level(lvl),
-              timestamp(TimeCurrent()),
-              logger_name(logger),
-              message(msg),
-              source_file(file),
-              source_line(line),
-              function_name(func),
-              thread_id(0),
-              error_code(err) {}
+              string file = "", int line = 0, string func = "", int err = 0)
+   {
+      level = lvl;
+      timestamp = TimeCurrent();
+      logger_name = logger;
+      message = msg;
+      source_file = file;
+      source_line = line;
+      function_name = func;
+      thread_id = 0;
+      error_code = err;
+   }
 };
 
 //+------------------------------------------------------------------+

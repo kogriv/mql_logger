@@ -28,7 +28,7 @@ private:
    string            FormatSourceInfo(const SLogRecord &record);
    string            FormatErrorInfo(int error_code);
    string            GetLevelColor(ENUM_LOG_LEVEL level);
-   string            WrapWithColor(string text, string color);
+   string            WrapWithColor(string text, string color_code);  // Изменено: color -> color_code
 
 public:
                      CDetailedFormatter(string pattern = "", bool multiline = false);
@@ -249,20 +249,20 @@ string CDetailedFormatter::GetLevelColor(ENUM_LOG_LEVEL level)
 {
    switch(level)
    {
-      case LOG_TRACE: return "37";   // White
-      case LOG_DEBUG: return "36";   // Cyan
-      case LOG_INFO:  return "32";   // Green
-      case LOG_WARN:  return "33";   // Yellow
-      case LOG_ERROR: return "31";   // Red
-      case LOG_FATAL: return "35";   // Magenta
-      default:        return "37";   // White
+      case 0: return "37";   // TRACE - White
+      case 1: return "36";   // DEBUG - Cyan
+      case 2: return "32";   // INFO - Green
+      case 3: return "33";   // WARN - Yellow
+      case 4: return "31";   // ERROR - Red
+      case 5: return "35";   // FATAL - Magenta
+      default: return "37";  // White
    }
 }
 
 //+------------------------------------------------------------------+
 //| Wrap text with ANSI color codes                                |
 //+------------------------------------------------------------------+
-string CDetailedFormatter::WrapWithColor(string text, string color)
+string CDetailedFormatter::WrapWithColor(string text, string color_code)  // Изменено: color -> color_code
 {
-   return StringFormat("\033[%sm%s\033[0m", color, text);
+   return StringFormat("\033[%sm%s\033[0m", color_code, text);  // Изменено: color -> color_code
 }

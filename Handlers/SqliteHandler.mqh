@@ -35,7 +35,7 @@ private:
    bool              CreateIndexes();
    bool              InsertRecord(const SLogRecord &record);
    void              CommitBatch();
-   string            EscapeSqlString(string input);
+   string            EscapeSqlString(string text);  // Изменено: input -> text
 
 public:
                      CSqliteHandler(string database_path, string table_name = "logs", 
@@ -75,7 +75,7 @@ CSqliteHandler::CSqliteHandler(string database_path, string table_name = "logs",
                               bool auto_commit = false, int batch_size = 100) :
    m_formatter(NULL),
    m_filter(NULL),
-   m_level(LOG_TRACE),
+   m_level((ENUM_LOG_LEVEL)0), // LOG_TRACE
    m_enabled(true),
    m_database_path(database_path),
    m_database_handle(INVALID_HANDLE),
@@ -179,14 +179,13 @@ bool CSqliteHandler::CreateTable()
 //+------------------------------------------------------------------+
 bool CSqliteHandler::CreateIndexes()
 {
-   string index_queries[] = {
-      StringFormat("CREATE INDEX IF NOT EXISTS idx_%s_timestamp ON %s(timestamp)", m_table_name, m_table_name),
-      StringFormat("CREATE INDEX IF NOT EXISTS idx_%s_level ON %s(level)", m_table_name, m_table_name),
-      StringFormat("CREATE INDEX IF NOT EXISTS idx_%s_logger ON %s(logger_name)", m_table_name, m_table_name),
-      StringFormat("CREATE INDEX IF NOT EXISTS idx_%s_created ON %s(created_at)", m_table_name, m_table_name)
-   };
+   string index_queries[4];
+   index_queries[0] = StringFormat("CREATE INDEX IF NOT EXISTS idx_%s_timestamp ON %s(timestamp)", m_table_name, m_table_name);
+   index_queries[1] = StringFormat("CREATE INDEX IF NOT EXISTS idx_%s_level ON %s(level)", m_table_name, m_table_name);
+   index_queries[2] = StringFormat("CREATE INDEX IF NOT EXISTS idx_%s_logger ON %s(logger_name)", m_table_name, m_table_name);
+   index_queries[3] = StringFormat("CREATE INDEX IF NOT EXISTS idx_%s_created ON %s(created_at)", m_table_name, m_table_name);
    
-   for(int i = 0; i < ArraySize(index_queries); i++)
+   for(int i = 0; i < 4; i++)
    {
       if(!ExecuteQuery(index_queries[i]))
       {
@@ -272,9 +271,9 @@ void CSqliteHandler::CommitBatch()
 //+------------------------------------------------------------------+
 //| Escape SQL string to prevent injection                         |
 //+------------------------------------------------------------------+
-string CSqliteHandler::EscapeSqlString(string input)
+string CSqliteHandler::EscapeSqlString(string text)  // Изменено: input -> text
 {
-   string output = input;
+   string output = text;  // Изменено: input -> text
    StringReplace(output, "'", "''");  // Escape single quotes
    return output;
 }
@@ -329,20 +328,20 @@ bool CSqliteHandler::IsEnabled(ENUM_LOG_LEVEL level)
 //+------------------------------------------------------------------+
 //| Flush handler                                                    |
 //+------------------------------------------------------------------+
-void CSqliteHandler::Flush()
-{
-   CommitBatch();
-}
-
-//+------------------------------------------------------------------+
-//| Close handler                                                    |
-//+------------------------------------------------------------------+
 void CSqliteHandler::Close()
 {
    CloseDatabase();
    m_enabled = false;
    m_formatter = NULL;
    m_filter = NULL;
+}
+
+//+------------------------------------------------------------------+
+//| Flush handler                                                    |
+//+------------------------------------------------------------------+
+void CSqliteHandler::Flush()
+{
+   CommitBatch();
 }
 
 //+------------------------------------------------------------------+
@@ -362,7 +361,7 @@ int CSqliteHandler::GetRecordCount()
    int count = -1;
    if(DatabaseRead(request))
    {
-      count = DatabaseColumnInteger(request, 0);
+      count = DatabaseColumnInteger(request, 0, count);
    }
    
    DatabaseFinalize(request);

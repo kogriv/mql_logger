@@ -13,11 +13,10 @@
 //| Include this file to get access to all logging functionality    |
 //+------------------------------------------------------------------+
 
-// Core components
+// Core components (БЕЗ макросов)
 #include "Core\LogRecord.mqh"
 #include "Core\Interfaces.mqh"
 #include "Core\Logger.mqh"
-#include "Core\Macros.mqh"
 
 // Handlers
 #include "Handlers\ConsoleHandler.mqh"
@@ -34,6 +33,9 @@
 
 // Factory
 #include "Factory\LoggerFactory.mqh"
+
+// Макросы подключаем В САМОМ КОНЦЕ, когда все классы уже определены
+#include "Core\Macros.mqh"
 
 //+------------------------------------------------------------------+
 //| Logger system version information                               |

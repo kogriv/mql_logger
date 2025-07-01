@@ -9,11 +9,19 @@
 #property strict
 
 #include "LogRecord.mqh"
+#include <Arrays\ArrayObj.mqh>
+
+//+------------------------------------------------------------------+
+//| Forward declarations                                             |
+//+------------------------------------------------------------------+
+class ILogHandler;
+class ILogFormatter;
+class ILogFilter;
 
 //+------------------------------------------------------------------+
 //| Logger interface                                                 |
 //+------------------------------------------------------------------+
-class ILogger
+class ILogger : public CObject
 {
 public:
    virtual void      Trace(string message) = 0;
@@ -36,24 +44,9 @@ public:
 };
 
 //+------------------------------------------------------------------+
-//| Log handler interface                                            |
-//+------------------------------------------------------------------+
-class ILogHandler
-{
-public:
-   virtual bool      Handle(const SLogRecord &record) = 0;
-   virtual void      SetFormatter(ILogFormatter* formatter) = 0;
-   virtual void      SetFilter(ILogFilter* filter) = 0;
-   virtual void      SetLevel(ENUM_LOG_LEVEL level) = 0;
-   virtual void      Flush() = 0;
-   virtual void      Close() = 0;
-   virtual bool      IsEnabled(ENUM_LOG_LEVEL level) = 0;
-};
-
-//+------------------------------------------------------------------+
 //| Log formatter interface                                          |
 //+------------------------------------------------------------------+
-class ILogFormatter
+class ILogFormatter : public CObject
 {
 public:
    virtual string    Format(const SLogRecord &record) = 0;
@@ -63,8 +56,23 @@ public:
 //+------------------------------------------------------------------+
 //| Log filter interface                                             |
 //+------------------------------------------------------------------+
-class ILogFilter
+class ILogFilter : public CObject
 {
 public:
    virtual bool      ShouldLog(const SLogRecord &record) = 0;
+};
+
+//+------------------------------------------------------------------+
+//| Log handler interface                                            |
+//+------------------------------------------------------------------+
+class ILogHandler : public CObject 
+{
+public:
+   virtual bool      Handle(const SLogRecord &record) = 0;
+   virtual void      SetFormatter(ILogFormatter* formatter) = 0;
+   virtual void      SetFilter(ILogFilter* filter) = 0;
+   virtual void      SetLevel(ENUM_LOG_LEVEL level) = 0;
+   virtual void      Flush() = 0;
+   virtual void      Close() = 0;
+   virtual bool      IsEnabled(ENUM_LOG_LEVEL level) = 0;
 };

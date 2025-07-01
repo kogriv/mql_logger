@@ -66,12 +66,14 @@ bool CLogger::m_global_lock = false;
 //+------------------------------------------------------------------+
 //| Constructor                                                      |
 //+------------------------------------------------------------------+
-CLogger::CLogger(string name) : m_name(name), 
-                               m_level(LOG_INFO), 
-                               m_enabled(true),
-                               m_last_flush_time(TimeCurrent()),
-                               m_auto_flush_interval(60) // 60 seconds default
+CLogger::CLogger(string name)
 {
+   m_name = name;
+   m_level = (ENUM_LOG_LEVEL)2;  // LOG_INFO = 2
+   m_enabled = true;
+   m_last_flush_time = TimeCurrent();
+   m_auto_flush_interval = 60; // 60 seconds default
+   
    m_handlers.FreeMode(false); // Don't delete objects automatically
 }
 
@@ -85,7 +87,8 @@ CLogger::~CLogger()
    // Close all handlers
    for(int i = 0; i < m_handlers.Total(); i++)
    {
-      ILogHandler* handler = m_handlers.At(i);
+      CObject* obj = m_handlers.At(i);
+      ILogHandler* handler = dynamic_cast<ILogHandler*>(obj);
       if(handler != NULL)
       {
          handler.Close();
@@ -149,7 +152,7 @@ void CLogger::CheckAutoFlush()
 //+------------------------------------------------------------------+
 void CLogger::Trace(string message)
 {
-   Log(LOG_TRACE, message);
+   Log((ENUM_LOG_LEVEL)0, message);  // LOG_TRACE = 0
 }
 
 //+------------------------------------------------------------------+
@@ -157,7 +160,7 @@ void CLogger::Trace(string message)
 //+------------------------------------------------------------------+
 void CLogger::Debug(string message)
 {
-   Log(LOG_DEBUG, message);
+   Log((ENUM_LOG_LEVEL)1, message);  // LOG_DEBUG = 1
 }
 
 //+------------------------------------------------------------------+
@@ -165,7 +168,7 @@ void CLogger::Debug(string message)
 //+------------------------------------------------------------------+
 void CLogger::Info(string message)
 {
-   Log(LOG_INFO, message);
+   Log((ENUM_LOG_LEVEL)2, message);  // LOG_INFO = 2
 }
 
 //+------------------------------------------------------------------+
@@ -173,7 +176,7 @@ void CLogger::Info(string message)
 //+------------------------------------------------------------------+
 void CLogger::Warn(string message)
 {
-   Log(LOG_WARN, message);
+   Log((ENUM_LOG_LEVEL)3, message);  // LOG_WARN = 3
 }
 
 //+------------------------------------------------------------------+
@@ -181,7 +184,7 @@ void CLogger::Warn(string message)
 //+------------------------------------------------------------------+
 void CLogger::Error(string message, int error_code = 0)
 {
-   Log(LOG_ERROR, message, error_code);
+   Log((ENUM_LOG_LEVEL)4, message, error_code);  // LOG_ERROR = 4
 }
 
 //+------------------------------------------------------------------+
@@ -189,7 +192,7 @@ void CLogger::Error(string message, int error_code = 0)
 //+------------------------------------------------------------------+
 void CLogger::Fatal(string message, int error_code = 0)
 {
-   Log(LOG_FATAL, message, error_code);
+   Log((ENUM_LOG_LEVEL)5, message, error_code);  // LOG_FATAL = 5
 }
 
 //+------------------------------------------------------------------+
@@ -213,7 +216,8 @@ void CLogger::Log(ENUM_LOG_LEVEL level, string message, int error_code = 0,
    // Send to all handlers
    for(int i = 0; i < m_handlers.Total(); i++)
    {
-      ILogHandler* handler = m_handlers.At(i);
+      CObject* obj = m_handlers.At(i);
+      ILogHandler* handler = dynamic_cast<ILogHandler*>(obj);
       if(handler != NULL)
       {
          handler.Handle(record);
@@ -250,7 +254,7 @@ void CLogger::AddHandler(ILogHandler* handler)
 {
    if(handler != NULL)
    {
-      m_handlers.Add(handler);
+      m_handlers.Add((CObject*)handler);
    }
 }
 
@@ -279,7 +283,8 @@ void CLogger::Flush()
 {
    for(int i = 0; i < m_handlers.Total(); i++)
    {
-      ILogHandler* handler = m_handlers.At(i);
+      CObject* obj = m_handlers.At(i);
+      ILogHandler* handler = dynamic_cast<ILogHandler*>(obj);
       if(handler != NULL)
       {
          handler.Flush();
