@@ -9,7 +9,7 @@
 #property script_show_inputs
 
 //--- Include the logger system
-#include "Include\Logger\Logger.mqh"
+#include "Logger.mqh"
 
 //+------------------------------------------------------------------+
 //| Script program start function                                    |

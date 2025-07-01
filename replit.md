@@ -94,8 +94,7 @@ Preferred communication style: Simple, everyday language.
 
 ### File Structure:
 ```
-Include/Logger/
-├── Logger.mqh (main include)
+Logger.mqh (main include)
 ├── Core/ (interfaces, logger, records, macros)
 ├── Handlers/ (console, file, sqlite)
 ├── Formatters/ (simple, detailed)
@@ -104,6 +103,7 @@ Include/Logger/
 ```
 
 ### Next Steps:
+- ✅ Restructured project - moved from Include/Logger/ to root directory
 - Test compilation in MetaEditor
 - Validate functionality with LoggerTest.mq5
 - Add any additional features based on testing results
@@ -111,3 +111,4 @@ Include/Logger/
 ## Changelog
 
 - July 01, 2025: Complete MVP implementation with all core components
+- July 01, 2025: Project restructured - moved from Include/Logger/ to root directory for easier synchronization
