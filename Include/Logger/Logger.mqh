@@ -1,10 +1,10 @@
 //+------------------------------------------------------------------+
 //|                                                       Logger.mqh |
-//|                                  Professional MQL5 Logger System |
-//|                                                                  |
+//|                                           Copyright 2025, kogriv |
+//|                             https://www.mql5.com/ru/users/kogriv |
 //+------------------------------------------------------------------+
-#property copyright "Professional MQL5 Logger System"
-#property link      ""
+#property copyright "Copyright 2025, kogriv"
+#property link      "https://www.mql5.com/ru/users/kogriv"
 #property version   "1.00"
 #property strict
 
@@ -14,26 +14,26 @@
 //+------------------------------------------------------------------+
 
 // Core components
-#include "Core/LogRecord.mqh"
-#include "Core/Interfaces.mqh"
-#include "Core/Logger.mqh"
-#include "Core/Macros.mqh"
+#include "Core\LogRecord.mqh"
+#include "Core\Interfaces.mqh"
+#include "Core\Logger.mqh"
+#include "Core\Macros.mqh"
 
 // Handlers
-#include "Handlers/ConsoleHandler.mqh"
-#include "Handlers/FileHandler.mqh"
-#include "Handlers/SqliteHandler.mqh"
+#include "Handlers\ConsoleHandler.mqh"
+#include "Handlers\FileHandler.mqh"
+#include "Handlers\SqliteHandler.mqh"
 
 // Formatters
-#include "Formatters/SimpleFormatter.mqh"
-#include "Formatters/DetailedFormatter.mqh"
+#include "Formatters\SimpleFormatter.mqh"
+#include "Formatters\DetailedFormatter.mqh"
 
 // Filters
-#include "Filters/LevelFilter.mqh"
-#include "Filters/RegexFilter.mqh"
+#include "Filters\LevelFilter.mqh"
+#include "Filters\RegexFilter.mqh"
 
 // Factory
-#include "Factory/LoggerFactory.mqh"
+#include "Factory\LoggerFactory.mqh"
 
 //+------------------------------------------------------------------+
 //| Logger system version information                               |

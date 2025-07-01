@@ -1,14 +1,14 @@
 //+------------------------------------------------------------------+
 //|                                              ConsoleHandler.mqh |
-//|                                  Professional MQL5 Logger System |
-//|                                                                  |
+//|                                           Copyright 2025, kogriv |
+//|                             https://www.mql5.com/ru/users/kogriv |
 //+------------------------------------------------------------------+
-#property copyright "Professional MQL5 Logger System"
-#property link      ""
+#property copyright "Copyright 2025, kogriv"
+#property link      "https://www.mql5.com/ru/users/kogriv"
 #property version   "1.00"
 #property strict
 
-#include "../Core/Interfaces.mqh"
+#include "..\Core\Interfaces.mqh"
 
 //+------------------------------------------------------------------+
 //| Console handler - outputs to MetaTrader terminal               |
