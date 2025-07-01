@@ -1,7 +1,7 @@
-# Logger MVP for MQL5
+# Professional MQL5 Logger System
 
 ## Overview
-This project is a Minimum Viable Product (MVP) for a thread-safe logger implementation in MQL5 (MetaQuotes Language 5) for MetaTrader 5 trading platform. The logger addresses the unique challenges of MQL5's pseudo-multithreading environment where multiple event handlers (OnTick, OnTimer, OnTrade, etc.) may compete for shared resources.
+This project is a complete, professional logging system for MQL5 (MetaQuotes Language 5) designed for MetaTrader 5 trading platform. The logger features a modular architecture with multiple handlers, advanced filtering capabilities, and comprehensive formatting options. It addresses the unique challenges of MQL5's pseudo-multithreading environment where multiple event handlers may compete for shared resources.
 
 ## System Architecture
 The system follows a simple singleton pattern with thread-safety mechanisms adapted for MQL5's execution model:

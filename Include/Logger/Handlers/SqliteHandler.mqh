@@ -8,7 +8,7 @@
 #property version   "1.00"
 #property strict
 
-#include "../Core/Interfaces.mqh"
+#include "..\Core\Interfaces.mqh"
 
 //+------------------------------------------------------------------+
 //| SQLite handler - stores logs in SQLite database                |

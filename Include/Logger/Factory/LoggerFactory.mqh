@@ -1,22 +1,22 @@
 //+------------------------------------------------------------------+
 //|                                               LoggerFactory.mqh |
-//|                                  Professional MQL5 Logger System |
-//|                                                                  |
+//|                                           Copyright 2025, kogriv |
+//|                             https://www.mql5.com/ru/users/kogriv |
 //+------------------------------------------------------------------+
-#property copyright "Professional MQL5 Logger System"
-#property link      ""
+#property copyright "Copyright 2025, kogriv"
+#property link      "https://www.mql5.com/ru/users/kogriv"
 #property version   "1.00"
 #property strict
 
-#include "../Core/Logger.mqh"
-#include "../Handlers/ConsoleHandler.mqh"
-#include "../Handlers/FileHandler.mqh"
-#include "../Handlers/SqliteHandler.mqh"
-#include "../Formatters/SimpleFormatter.mqh"
-#include "../Formatters/DetailedFormatter.mqh"
-#include "../Filters/LevelFilter.mqh"
-#include "../Filters/RegexFilter.mqh"
-#include <Arrays/ArrayObj.mqh>
+#include "..\Core\Logger.mqh"
+#include "..\Handlers\ConsoleHandler.mqh"
+#include "..\Handlers\FileHandler.mqh"
+#include "..\Handlers\SqliteHandler.mqh"
+#include "..\Formatters\SimpleFormatter.mqh"
+#include "..\Formatters\DetailedFormatter.mqh"
+#include "..\Filters\LevelFilter.mqh"
+#include "..\Filters\RegexFilter.mqh"
+#include <Arrays\ArrayObj.mqh>
 
 //+------------------------------------------------------------------+
 //| Logger configuration structure                                  |
