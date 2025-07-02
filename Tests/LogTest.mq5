@@ -62,7 +62,9 @@ void TestFilters()
    Print("--- Testing filters ---");
    
    // Create logger with level filter
-   ILogger* filtered_logger = CLoggerFactory::CreateLogger("filtered");
+   SLoggerConfig cfg;
+   cfg.console_output = false;      // не добавлять обработчик по умолчанию
+   ILogger* filtered_logger = CLoggerFactory::CreateLogger("filtered", cfg);
    if(filtered_logger != NULL)
    {
       CConsoleHandler* handler = CLoggerFactory::CreateConsoleHandler();
@@ -73,13 +75,15 @@ void TestFilters()
          handler.SetFilter(filter);
          filtered_logger.AddHandler(handler);
          
-         // These should not appear (below WARN level)
+         // These should not appear (below FATAL level)
          filtered_logger.Debug("Debug message - should NOT appear");
          filtered_logger.Info("Info message - should NOT appear");
          
-         // These should appear (WARN level and above)
-         filtered_logger.Warn("Warning message - should appear");
-         filtered_logger.Error("Error message - should appear");
+         
+         filtered_logger.Warn("Warning message - should NOT appear");
+         filtered_logger.Error("Error message - should NOT appear");
+
+         // These should appear (FATAL level and above)
       }
    }
    
