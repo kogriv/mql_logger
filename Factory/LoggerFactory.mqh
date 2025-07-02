@@ -101,6 +101,8 @@ public:
    static CLogger*   CreateFileLogger(string name, string filename, ENUM_LOG_LEVEL level = LOG_INFO);
    static CLogger*   CreateDatabaseLogger(string name, string database_path, ENUM_LOG_LEVEL level = LOG_INFO);
    static CLogger*   CreateCompositeLogger(string name, bool console = true, string log_file = "", string db_file = "");
+   static CLogger*   CreateCompositeLogger(string name, bool console, string log_file, string db_file, 
+                                          bool db_auto_commit, int db_batch_size);
    
    // Management methods
    static void       FlushAll();
@@ -553,6 +555,30 @@ CLogger* CLoggerFactory::CreateDatabaseLogger(string name, string database_path,
 //| Create composite logger (multiple outputs)                     |
 //+------------------------------------------------------------------+
 CLogger* CLoggerFactory::CreateCompositeLogger(string name, bool console = true, string log_file = "", string db_file = "")
+// Оставляем старую версию для совместимости
+{
+   // Для тестера используем безопасные настройки по умолчанию
+   return CreateCompositeLogger(name, console, log_file, db_file, true, 1);
+}
+// {
+//    SLoggerConfig config;
+//    config.name = name;
+//    config.level = LOG_INFO;
+//    config.console_output = console;
+//    config.file_output = (StringLen(log_file) > 0);
+//    config.database_output = (StringLen(db_file) > 0);
+//    config.log_file = log_file;
+//    config.database_file = db_file;
+//    config.detailed_format = true;
+   
+//    return CreateLogger(name, config);
+// }
+
+//+------------------------------------------------------------------+
+//| Create composite logger with SQLite settings                   |
+//+------------------------------------------------------------------+
+CLogger* CLoggerFactory::CreateCompositeLogger(string name, bool console, string log_file, string db_file, 
+                                              bool db_auto_commit, int db_batch_size)
 {
    SLoggerConfig config;
    config.name = name;
@@ -564,7 +590,28 @@ CLogger* CLoggerFactory::CreateCompositeLogger(string name, bool console = true,
    config.database_file = db_file;
    config.detailed_format = true;
    
-   return CreateLogger(name, config);
+   CLogger* logger = CreateLogger(name, config);
+   
+   // Настраиваем SQLite handler с переданными параметрами
+   if(config.database_output && logger != NULL)
+   {
+      for(int i = s_handlers.Total() - 1; i >= 0; i--)
+      {
+         CObject* obj = s_handlers.At(i);
+         CSqliteHandler* sqlite_handler = dynamic_cast<CSqliteHandler*>(obj);
+         if(sqlite_handler != NULL && 
+            StringFind(sqlite_handler.GetDatabasePath(), db_file) >= 0)
+         {
+            sqlite_handler.SetAutoCommit(db_auto_commit);
+            sqlite_handler.SetBatchSize(db_batch_size);
+            PrintFormat("SQLite handler configured: auto_commit=%s, batch_size=%d", 
+                       db_auto_commit ? "true" : "false", db_batch_size);
+            break;
+         }
+      }
+   }
+   
+   return logger;
 }
 
 //+------------------------------------------------------------------+
@@ -661,11 +708,29 @@ void CLoggerFactory::RemoveAllLoggers()
 }
 
 //+------------------------------------------------------------------+
-//| Shutdown factory and cleanup all resources                     |
+//| Shutdown factory and cleanup all resources - улучшенная версия |
 //+------------------------------------------------------------------+
 void CLoggerFactory::Shutdown()
 {
+   PrintFormat("Logger factory shutdown started...");
+   
+   // Принудительно сбрасываем все логгеры
    FlushAll();
+   
+   // Дополнительно закрываем все SQLite handlers
+   for(int i = 0; i < s_handlers.Total(); i++)
+   {
+      CObject* obj = s_handlers.At(i);
+      CSqliteHandler* sqlite_handler = dynamic_cast<CSqliteHandler*>(obj);
+      if(sqlite_handler != NULL)
+      {
+         PrintFormat("Force closing SQLite handler: %s", sqlite_handler.GetDatabasePath());
+         sqlite_handler.Flush();
+         sqlite_handler.Close();
+      }
+   }
+   
+   PrintFormat("Logger factory shutdown completed");
    Cleanup();
 }
 

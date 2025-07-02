@@ -39,7 +39,7 @@ private:
 
 public:
                      CSqliteHandler(string database_path, string table_name = "logs", 
-                                   bool auto_commit = false, int batch_size = 100);
+                                   bool auto_commit = true, int batch_size = 100);
                     ~CSqliteHandler();
    
    // ILogHandler implementation
@@ -72,7 +72,7 @@ public:
 //| Constructor                                                      |
 //+------------------------------------------------------------------+
 CSqliteHandler::CSqliteHandler(string database_path, string table_name = "logs", 
-                              bool auto_commit = false, int batch_size = 100) :
+                              bool auto_commit = true, int batch_size = 100) :
    m_formatter(NULL),
    m_filter(NULL),
    m_level((ENUM_LOG_LEVEL)0), // LOG_TRACE
@@ -134,20 +134,31 @@ bool CSqliteHandler::OpenDatabase()
 }
 
 //+------------------------------------------------------------------+
-//| Close SQLite database                                           |
+//| Close SQLite database - улучшенная версия                        |
 //+------------------------------------------------------------------+
 void CSqliteHandler::CloseDatabase()
 {
    if(m_database_handle != INVALID_HANDLE)
    {
-      // Commit any pending records
+      // Принудительно коммитим все pending записи
       if(m_pending_records > 0)
       {
-         CommitBatch();
+         PrintFormat("Committing %d pending records before closing database", m_pending_records);
+         
+         if(!m_auto_commit)
+         {
+            ExecuteQuery("COMMIT");
+         }
+         m_pending_records = 0;
       }
+      
+      // Принудительная синхронизация
+      ExecuteQuery("PRAGMA synchronous = FULL");
       
       DatabaseClose(m_database_handle);
       m_database_handle = INVALID_HANDLE;
+      
+      PrintFormat("Database closed: %s", m_database_path);
    }
 }
 
@@ -253,19 +264,28 @@ bool CSqliteHandler::InsertRecord(const SLogRecord &record)
 }
 
 //+------------------------------------------------------------------+
-//| Commit pending records                                          |
+//| Commit pending records - улучшенная версия                     |
 //+------------------------------------------------------------------+
 void CSqliteHandler::CommitBatch()
 {
+   if(m_database_handle == INVALID_HANDLE)
+      return;
+      
    if(m_pending_records > 0)
    {
       if(!m_auto_commit)
       {
-         ExecuteQuery("COMMIT");
+         if(!ExecuteQuery("COMMIT"))
+         {
+            PrintFormat("Failed to commit batch of %d records", m_pending_records);
+         }
          ExecuteQuery("BEGIN TRANSACTION");
       }
       m_pending_records = 0;
    }
+   
+   // Принудительная синхронизация с диском
+   ExecuteQuery("PRAGMA synchronous = FULL");
 }
 
 //+------------------------------------------------------------------+
