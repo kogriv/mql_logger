@@ -170,7 +170,7 @@ bool CSqliteHandler::CreateTable()
    string create_sql = StringFormat(
       "CREATE TABLE IF NOT EXISTS %s ("
       "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-      "timestamp INTEGER NOT NULL, "
+      "ticktime DATETIME NOT NULL, "
       "level INTEGER NOT NULL, "
       "logger_name TEXT NOT NULL, "
       "message TEXT NOT NULL, "
@@ -179,6 +179,7 @@ bool CSqliteHandler::CreateTable()
       "function_name TEXT, "
       "thread_id INTEGER, "
       "error_code INTEGER, "
+      "timestamp INTEGER NOT NULL, "
       "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
       ")", m_table_name);
    
@@ -231,10 +232,10 @@ bool CSqliteHandler::ExecuteQuery(string query)
 bool CSqliteHandler::InsertRecord(const SLogRecord &record)
 {
    string insert_sql = StringFormat(
-      "INSERT INTO %s (timestamp, level, logger_name, message, source_file, source_line, function_name, thread_id, error_code) "
-      "VALUES (%d, %d, '%s', '%s', '%s', %d, '%s', %d, %d)",
+      "INSERT INTO %s (ticktime, level, logger_name, message, source_file, source_line, function_name, thread_id, error_code, timestamp) "
+      "VALUES ('%s', %d, '%s', '%s', '%s', %d, '%s', %d, %d, %d)",
       m_table_name,
-      (int)record.timestamp,
+      TimeToString(record.timestamp, TIME_DATE|TIME_SECONDS),
       (int)record.level,
       EscapeSqlString(record.logger_name),
       EscapeSqlString(record.message),
@@ -242,7 +243,8 @@ bool CSqliteHandler::InsertRecord(const SLogRecord &record)
       record.source_line,
       EscapeSqlString(record.function_name),
       record.thread_id,
-      record.error_code
+      record.error_code,
+      (int)record.timestamp
    );
    
    if(!ExecuteQuery(insert_sql))
