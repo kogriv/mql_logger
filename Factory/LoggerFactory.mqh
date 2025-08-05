@@ -19,6 +19,16 @@
 #include <Arrays\ArrayObj.mqh>
 
 //+------------------------------------------------------------------+
+//| Logger profile enumeration                                      |
+//+------------------------------------------------------------------+
+enum ENUM_LOGGER_PROFILE
+{
+   LOGGER_PROFILE_DEBUG,        // Console(WARN) + Database(TRACE) - full debug logging
+   LOGGER_PROFILE_PERFORMANCE,  // Console(WARN) only - fast mode for optimization
+   LOGGER_PROFILE_PRODUCTION    // Console(WARN) + Database(INFO) - production logging
+};
+
+//+------------------------------------------------------------------+
 //| Logger configuration structure                                  |
 //+------------------------------------------------------------------+
 struct SLoggerConfig
@@ -103,6 +113,9 @@ public:
    static CLogger*   CreateCompositeLogger(string name, bool console = true, string log_file = "", string db_file = "");
    static CLogger*   CreateCompositeLogger(string name, bool console, string log_file, string db_file, 
                                           bool db_auto_commit, int db_batch_size);
+   
+   // Profile-based logger creation
+   static CLogger*   CreateProfileLogger(string name, ENUM_LOGGER_PROFILE profile);
    
    // Management methods
    static void       FlushAll();
@@ -609,6 +622,112 @@ CLogger* CLoggerFactory::CreateCompositeLogger(string name, bool console, string
             break;
          }
       }
+   }
+   
+   return logger;
+}
+
+//+------------------------------------------------------------------+
+//| Create logger with predefined profile                          |
+//+------------------------------------------------------------------+
+CLogger* CLoggerFactory::CreateProfileLogger(string name, ENUM_LOGGER_PROFILE profile)
+{
+   Initialize();
+   
+   if(!IsValidLoggerName(name))
+   {
+      PrintFormat("Invalid logger name: %s", name);
+      return NULL;
+   }
+   
+   // Check if logger already exists
+   if(FindLogger(name) != NULL)
+   {
+      PrintFormat("Logger already exists: %s", name);
+      return FindLogger(name);
+   }
+   
+   // Create base logger configuration
+   SLoggerConfig cfg;
+   cfg.console_output = false;      // Don't add default handler
+   cfg.level = LOG_TRACE;           // Allow all messages through
+   
+   CLogger* logger = CLoggerFactory::CreateLogger(name, cfg);
+   if(logger == NULL)
+   {
+      PrintFormat("Failed to create profile logger: %s", name);
+      return NULL;
+   }
+   
+   // Configure based on profile
+   switch(profile)
+   {
+      case LOGGER_PROFILE_DEBUG:
+         {
+            // Console(WARN) + Database(TRACE) - full debug logging
+            CConsoleHandler* console_handler = CreateConsoleHandler();
+            if(console_handler != NULL)
+            {
+               console_handler.SetLevel(LOG_WARN);
+               logger.AddHandler(console_handler);
+            }
+            
+            CSqliteHandler* db_handler = CreateSqliteHandler(name + ".db");
+            if(db_handler != NULL)
+            {
+               db_handler.SetLevel(LOG_TRACE);
+               db_handler.SetAutoCommit(true);
+               db_handler.SetBatchSize(1);
+               logger.AddHandler(db_handler);
+            }
+            
+            logger.Log(LOG_WARN, StringFormat("Logger '%s' initialized with DEBUG profile (Console:WARN + DB:TRACE)", name), 0, "", 0, "");
+            break;
+         }
+         
+      case LOGGER_PROFILE_PERFORMANCE:
+         {
+            // Console(WARN) only - fast mode for optimization
+            CConsoleHandler* console_handler = CreateConsoleHandler();
+            if(console_handler != NULL)
+            {
+               console_handler.SetLevel(LOG_WARN);
+               logger.AddHandler(console_handler);
+            }
+            
+            logger.Log(LOG_WARN, StringFormat("Logger '%s' initialized with PERFORMANCE profile (Console:WARN only)", name), 0, "", 0, "");
+            break;
+         }
+         
+      case LOGGER_PROFILE_PRODUCTION:
+         {
+            // Console(WARN) + Database(INFO) - production logging
+            CConsoleHandler* console_handler = CreateConsoleHandler();
+            if(console_handler != NULL)
+            {
+               console_handler.SetLevel(LOG_WARN);
+               logger.AddHandler(console_handler);
+            }
+            
+            CSqliteHandler* db_handler = CreateSqliteHandler(name + ".db");
+            if(db_handler != NULL)
+            {
+               db_handler.SetLevel(LOG_INFO);
+               db_handler.SetAutoCommit(true);
+               db_handler.SetBatchSize(10);  // Higher batch size for production
+               logger.AddHandler(db_handler);
+            }
+            
+            logger.Log(LOG_WARN, StringFormat("Logger '%s' initialized with PRODUCTION profile (Console:WARN + DB:INFO)", name), 0, "", 0, "");
+            break;
+         }
+         
+      default:
+         {
+            PrintFormat("Unknown logger profile: %d", profile);
+            delete logger;
+            return NULL;
+         }
    }
    
    return logger;
