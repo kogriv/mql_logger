@@ -22,6 +22,7 @@ private:
    bool              m_enabled;           // Is logger enabled
    int               m_depth;             // Log() calls in progress (a handler may log too)
    int               m_dropped;           // Records dropped by the recursion guard
+   long              m_counts[6];         // Records passed to handlers, by level
    static bool       s_recursion_reported; // Recursion already printed to the journal
    
    ulong             m_last_flush_ms;     // Last flush, GetTickCount64 (does not depend on ticks)
@@ -60,6 +61,8 @@ public:
    ILogHandler*      GetHandler(int index);
    bool              HasHandler(ILogHandler* handler);
    int               DroppedCount() const { return m_dropped; }
+   long              Count(ENUM_LOG_LEVEL level) const;   // records of the level since creation or ResetCounts()
+   void              ResetCounts() { ArrayInitialize(m_counts, 0); }
 };
 
 // Static member initialization
@@ -79,6 +82,7 @@ CLogger::CLogger(string name)
    m_enabled = true;
    m_depth = 0;
    m_dropped = 0;
+   ArrayInitialize(m_counts, 0);
    m_last_flush_ms = GetTickCount64();
    m_auto_flush_interval = 60; // 60 seconds default
    
@@ -93,6 +97,16 @@ CLogger::~CLogger()
    // Обработчики логгеру не принадлежат: закрывает их владелец (фабрика или тот, кто создал)
    Flush();
    m_handlers.Clear();
+}
+
+//+------------------------------------------------------------------+
+//| Number of records of the level that passed the logger level     |
+//+------------------------------------------------------------------+
+long CLogger::Count(ENUM_LOG_LEVEL level) const
+{
+   if(level < LOG_TRACE || level > LOG_FATAL)
+      return 0;
+   return m_counts[level];
 }
 
 //+------------------------------------------------------------------+
@@ -220,6 +234,8 @@ void CLogger::Log(ENUM_LOG_LEVEL level, string message, int error_code = 0,
       return;
    }
    m_depth++;
+   if(level >= LOG_TRACE && level <= LOG_FATAL)
+      m_counts[level]++;
    
    // Create log record
    SLogRecord record;

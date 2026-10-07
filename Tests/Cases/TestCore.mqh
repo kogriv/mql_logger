@@ -67,6 +67,51 @@ void TestCore()
       // обработчик создан не фабрикой: логгер и фабрика его не закрывают
       LT_CHECK(!b.m_closed);
    }
+   //--- счётчики по уровням
+   LT_CASE("core: record counters by level");
+   {
+      CLogger* lg = LtBareLogger("lgt_core_cnt", LOG_INFO);
+      lg.Debug("below the logger level - not counted");
+      lg.Info("i"); lg.Info("i"); lg.Warn("w"); lg.Error("e", 1);
+      LT_EQ(lg.Count(LOG_DEBUG), 0);
+      LT_EQ(lg.Count(LOG_INFO), 2);
+      LT_EQ(lg.Count(LOG_WARN), 1);
+      LT_EQ(lg.Count(LOG_ERROR), 1);
+      LT_EQ(lg.Count(LOG_FATAL), 0);
+      lg.ResetCounts();
+      LT_EQ(lg.Count(LOG_INFO), 0);
+      CLoggerFactory::Shutdown();
+   }
+   //--- обработчик в память
+   LT_CASE("core: memory handler keeps the last lines");
+   {
+      CMemoryHandler* mem = CLoggerFactory::CreateMemoryHandler(3, LOG_WARN);
+      CLogger* lg = LtBareLogger("lgt_core_mem");
+      lg.AddHandler(mem);
+      lg.Info("below the handler level");
+      LT_EQ(mem.Count(), 0);
+      lg.Warn("one"); lg.Error("two", 7);
+      LT_EQ(mem.Count(), 2);
+      LT_EQ(mem.Overwritten(), 0);
+      LT_CHECK(StringFind(mem.Line(0), "[WARN] lgt_core_mem: one") > 0);
+      LT_CHECK(StringFind(mem.Line(1), "two [Error: 7]") > 0);
+      lg.Warn("three"); lg.Warn("four"); lg.Warn("five");
+      LT_EQ(mem.Count(), 3);
+      LT_EQ(mem.Total(), 5);
+      LT_EQ(mem.Overwritten(), 2);
+      LT_CHECK(StringFind(mem.Line(0), "three") > 0);
+      LT_CHECK(StringFind(mem.Line(2), "five") > 0);
+      LT_EQ(mem.Line(3), "");
+      string parts[];
+      LT_EQ(StringSplit(mem.Text("\n"), '\n', parts), 3);
+      mem.SetFormatter(CLoggerFactory::CreateSimpleFormatter("%level%:%message%"));
+      lg.Warn("six");
+      LT_EQ(mem.Line(2), "WARN:six");
+      mem.Clear();
+      LT_EQ(mem.Count(), 0);
+      LT_EQ(mem.Text(), "");
+      CLoggerFactory::Shutdown();
+   }
    //--- запись из обработчика в другой логгер
    LT_CASE("core: record written from a handler reaches another logger");
    {

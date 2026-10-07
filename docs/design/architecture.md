@@ -13,6 +13,8 @@
 | `Handlers/` | `ConsoleHandler.mqh` | `Print` в журнал терминала, по желанию `Alert` для `ERROR` и `FATAL` |
 | | `FileHandler.mqh` | текстовый файл в `MQL5\Files` (UTF-8): прямая запись или буфер 8 КБ, ротация по размеру с нумерованными архивами |
 | | `SqliteHandler.mqh` | таблица в базе SQLite в `MQL5\Files`: запись сразу или пакетами (LOG-D-01) |
+| | `MemoryHandler.mqh` | кольцевой буфер последних строк в памяти |
+| `Tester/` | `TesterLog.mqh` | журналы проходов оптимизации: `LogTesterSend` (кадр из `OnTester`), `CTesterLogCollector` (приём в терминале, база); подключается отдельно |
 | `Formatters/` | `PatternFormatter.mqh`, `SimpleFormatter.mqh`, `DetailedFormatter.mqh` | строка из записи по шаблону с полями `%имя%`: шаблон разбирается один раз, строка собирается за один проход |
 | `Filters/` | `LevelFilter.mqh`, `SubstringFilter.mqh` (`RegexFilter.mqh` — устаревшее имя) | отбор записей по уровню и по вхождению подстроки |
 | `Factory/` | `LoggerFactory.mqh` | `CLoggerFactory` — статические реестры, создание и настройка, профили |
@@ -107,6 +109,7 @@ classDiagram
     ILogHandler <|.. CConsoleHandler
     ILogHandler <|.. CFileHandler
     ILogHandler <|.. CSqliteHandler
+    ILogHandler <|.. CMemoryHandler
     ILogFormatter <|.. CPatternFormatter
     CPatternFormatter <|-- CSimpleFormatter
     CPatternFormatter <|-- CDetailedFormatter

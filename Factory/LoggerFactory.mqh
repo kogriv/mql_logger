@@ -11,6 +11,7 @@
 #include "..\Handlers\ConsoleHandler.mqh"
 #include "..\Handlers\FileHandler.mqh"
 #include "..\Handlers\SqliteHandler.mqh"
+#include "..\Handlers\MemoryHandler.mqh"
 #include "..\Formatters\SimpleFormatter.mqh"
 #include "..\Formatters\DetailedFormatter.mqh"
 #include "..\Filters\LevelFilter.mqh"
@@ -103,6 +104,8 @@ public:
                                                bool common = false, bool unicode = false);
    static CSqliteHandler*    CreateSqliteHandler(string database_path, string table_name = "logs",
                                                  bool auto_commit = true, int batch_size = 100);
+   
+   static CMemoryHandler*    CreateMemoryHandler(int capacity = 200, ENUM_LOG_LEVEL level = LOG_WARN);
    
    // Formatter creation methods
    static CSimpleFormatter*  CreateSimpleFormatter(string pattern = "");
@@ -397,6 +400,22 @@ CSqliteHandler* CLoggerFactory::CreateSqliteHandler(string database_path, string
    }
    
    CSqliteHandler* handler = new CSqliteHandler(database_path, table_name, auto_commit, batch_size);
+   if(handler != NULL)
+   {
+      RegisterHandler(handler);
+   }
+   
+   return handler;
+}
+
+//+------------------------------------------------------------------+
+//| Create memory handler                                          |
+//+------------------------------------------------------------------+
+CMemoryHandler* CLoggerFactory::CreateMemoryHandler(int capacity = 200, ENUM_LOG_LEVEL level = LOG_WARN)
+{
+   Initialize();
+   
+   CMemoryHandler* handler = new CMemoryHandler(capacity, level);
    if(handler != NULL)
    {
       RegisterHandler(handler);

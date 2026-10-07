@@ -63,7 +63,10 @@
 - Запись: `time_local`, `elapsed_us`, `sequence`; поля шаблона `%localtime%`, `%elapsed%`, `%seq%`.
 - `CPatternFormatter` — общий разбор шаблона; `LogFormatDefault()`.
 - `CSubstringFilter` (прежнее имя `CRegexFilter` оставлено как устаревшее).
-- Тесты `Tests/` (55 случаев), примеры `Examples/`, документы `docs/`.
+- `CMemoryHandler` — последние строки в памяти; `CLogger::Count(level)`, `ResetCounts()`.
+- `Tester/TesterLog.mqh`: `LogTesterSend()` и `CTesterLogCollector` — журналы проходов оптимизации в терминал
+  кадрами (проверено с удалёнными агентами).
+- Тесты `Tests/` (57 случаев), примеры `Examples/`, документы `docs/`.
 
 ### Удалено
 

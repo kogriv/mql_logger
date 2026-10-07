@@ -24,10 +24,10 @@
 | № | Пробел | Тяжесть | Статус | Задачи |
 |---|---|---|---|---|
 | [LOG-GAP-01](LOG-GAP-01-no-real-tests.md) | Нет тестов, которые что-то проверяют | — | закрыт | LOG-BL-01 |
-| [LOG-GAP-02](LOG-GAP-02-cost-of-disabled-logging.md) | Выключенное логирование стоит времени | C | открыт | LOG-BL-05, LOG-BL-12 |
+| [LOG-GAP-02](LOG-GAP-02-cost-of-disabled-logging.md) | Выключенное логирование стоит времени | C | закрыт | LOG-BL-05, LOG-BL-12 |
 | [LOG-GAP-03](LOG-GAP-03-file-handler-loses-data.md) | Запись в файл теряет данные | A | закрыт | LOG-BL-02 |
 | [LOG-GAP-04](LOG-GAP-04-sqlite-handler.md) | SQLite: неверный счётчик, ошибки в пакетном режиме, медленная запись | A, C | закрыт | LOG-BL-03, LOG-BL-04 |
-| [LOG-GAP-05](LOG-GAP-05-tester-agents.md) | Журналы проходов тестера и агентов не собрать | B | открыт | LOG-BL-10 |
+| [LOG-GAP-05](LOG-GAP-05-tester-agents.md) | Журналы проходов тестера и агентов не собрать | B | закрыт | LOG-BL-10 |
 | [LOG-GAP-06](LOG-GAP-06-record-time.md) | Время записи неточное, миллисекунды выдуманы | A | закрыт | LOG-BL-08 |
 | [LOG-GAP-07](LOG-GAP-07-core-and-factory.md) | Ядро и фабрика: потерянные записи, владение, имена | A, B | закрыт | LOG-BL-06, LOG-BL-09 |
 | [LOG-GAP-08](LOG-GAP-08-docs-and-repo.md) | README расходится с кодом, в репозитории лишнее | D | закрыт | LOG-BL-11 |

@@ -5,7 +5,8 @@
 
 - Выключенный уровень стоит одной проверки: строка сообщения не строится (0,01 мкс на вызов).
 - Запись в базу переживает критическую ошибку программы (`array out of range` и подобные).
-- Тесты: 55 случаев, `Tests/`.
+- Журналы проходов оптимизации, в том числе с удалённых агентов, собираются в терминале.
+- Тесты: 57 случаев, `Tests/`.
 
 ## Установка
 
@@ -167,6 +168,12 @@ file.SetFlushInterval(10);              // сброс буфера не реже
 - Файл недоступен — одна строка в журнал терминала, повтор открытия раз в 5 с; сколько записей не сохранено —
   `DroppedCount()`.
 
+### Память — `CMemoryHandler`
+
+`CLoggerFactory::CreateMemoryHandler(capacity = 200, level = LOG_WARN)` — кольцевой буфер последних строк:
+`Count()`, `Line(i)`, `Text()`, `Overwritten()`, `Clear()`. На диск не пишет; нужен для журналов проходов
+оптимизации (ниже) и для показа последних событий на графике.
+
 ### База SQLite — `CSqliteHandler`
 
 ```mql5
@@ -261,9 +268,50 @@ handler.SetFilter(text);
 ## В тестере и на агентах
 
 - Файлы и базы пишутся в `MQL5\Files` агента (`Tester\Agent-…\MQL5\Files`); на удалённом агенте они остаются на
-  его машине. Сбор журналов проходов — в работе (`docs/backlog/LOG-BL-10`).
+  его машине. В одиночном тесте на локальном агенте базу профиля `DEBUG` искать там.
 - Для оптимизации — профиль `PERFORMANCE` и макросы: вызов ниже WARN стоит 0,01 мкс.
 - Время в записях — время модели.
+
+### Журналы проходов оптимизации
+
+Итог журнала каждого прохода — число записей по уровням и последние строки — уходит в терминал кадром и
+складывается в базу в `MQL5\Files` терминала. Работает и с удалёнными агентами.
+
+```mql5
+#include <Logger\Logger.mqh>
+#include <Logger\Tester\TesterLog.mqh>
+
+CLogger*            g_logger;
+CMemoryHandler*     g_memory;        // последние 100 строк от WARN
+CTesterLogCollector g_collector;
+
+int OnInit()
+{
+   g_logger = CLoggerFactory::CreateProfileLogger("MyExpert", LOGGER_PROFILE_PERFORMANCE);
+   g_memory = CLoggerFactory::CreateMemoryHandler(100, LOG_WARN);
+   g_logger.AddHandler(g_memory);
+   return INIT_SUCCEEDED;
+}
+double OnTester()       { LogTesterSend(g_logger, g_memory); return 0; }   // на агенте, в конце прохода
+void   OnTesterInit()   { g_collector.Open("MyExpert_passes.db"); }         // дальше — в терминале
+void   OnTesterPass()   { g_collector.Collect(); }
+void   OnTesterDeinit() { g_collector.Collect(); g_collector.Close(); }
+```
+
+```sql
+-- в каких проходах были ошибки и с какими параметрами
+SELECT pass, inputs, warn, error, fatal FROM passes WHERE error + fatal > 0 ORDER BY pass;
+-- что именно записал проход 3
+SELECT line FROM pass_lines WHERE pass = 3 ORDER BY n;
+```
+
+- `passes`: проход, входные параметры, число записей каждого уровня, `lines_lost` — сколько строк не поместилось
+  в буфер.
+- Счётчики (`logger.Count(LOG_ERROR)`) считают записи, прошедшие уровень логгера: в профиле `PERFORMANCE` — от
+  WARN.
+- `Collect()` забирает из очереди все кадры; кадры с другим идентификатором пропускает — если советник шлёт и свои
+  кадры, читайте их до вызова `Collect()` или через `FrameFilter`.
+- Проверено на 40 проходах: 1 локальный агент и 39 удалённых (Wine), все 40 кадров пришли.
 
 ## Как это выполняется
 

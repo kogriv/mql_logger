@@ -21,6 +21,7 @@
 #include "Handlers\ConsoleHandler.mqh"
 #include "Handlers\FileHandler.mqh"
 #include "Handlers\SqliteHandler.mqh"
+#include "Handlers\MemoryHandler.mqh"
 
 // Formatters
 #include "Formatters\PatternFormatter.mqh"
