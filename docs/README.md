@@ -19,6 +19,7 @@
 ## Состояние на 07.10.2026
 
 - Разбор: [`review/2026-10-07-audit.md`](review/2026-10-07-audit.md) — 40 находок, 20 подтверждены запуском в терминале, остальные — чтением кода.
-- Пробелов — 10, задач — 13, из них ни одна не начата.
+- Пробелов — 10, задач — 13; ход — в оглавлениях `gaps/` и `backlog/`.
+- Тесты: `Tests/` (36 случаев), запуск в `mql` — `mql-test unit Scripts/UnitTests/Logger`.
 - Библиотека собирается (MetaEditor, 0 ошибок, 0 предупреждений), используется в репозитории `mql`: `Include/Expert/MyExpert`,
   `Include/Trade/TradeSerie`, `Include/Expert/MySignals`, советник `TEST_EA_AO_DZZ_m` — 376 вызовов.
