@@ -376,27 +376,7 @@ bool CFileHandler::Handle(const SLogRecord &record)
    }
    else
    {
-      // Default formatting for files
-      formatted_message = StringFormat("%s [%s] %s: %s",
-                                      TimeToString(record.timestamp, TIME_DATE|TIME_SECONDS),
-                                      LogLevelToString(record.level),
-                                      record.logger_name,
-                                      record.message);
-      
-      // Add source information if available
-      if(StringLen(record.source_file) > 0)
-      {
-         formatted_message += StringFormat(" [%s:%d:%s]", 
-                                         record.source_file, 
-                                         record.source_line, 
-                                         record.function_name);
-      }
-      
-      // Add error code if present
-      if(record.error_code != 0)
-      {
-         formatted_message += StringFormat(" [Error: %d]", record.error_code);
-      }
+      formatted_message = LogFormatDefault(record);
    }
    
    return WriteToFile(formatted_message);

@@ -25,7 +25,7 @@ private:
    int               m_dropped;           // Records dropped by the recursion guard
    static bool       s_recursion_reported; // Recursion already printed to the journal
    
-   datetime          m_last_flush_time;   // Last flush time
+   ulong             m_last_flush_ms;     // Last flush, GetTickCount64 (does not depend on ticks)
    int               m_auto_flush_interval; // Auto flush interval (seconds)
    
    void              CreateLogRecord(ENUM_LOG_LEVEL level, string message, 
@@ -78,7 +78,7 @@ CLogger::CLogger(string name)
    m_enabled = true;
    m_depth = 0;
    m_dropped = 0;
-   m_last_flush_time = TimeCurrent();
+   m_last_flush_ms = GetTickCount64();
    m_auto_flush_interval = 60; // 60 seconds default
    
    m_handlers.FreeMode(false); // Don't delete objects automatically
@@ -113,14 +113,13 @@ void CLogger::CreateLogRecord(ENUM_LOG_LEVEL level, string message,
                              SLogRecord &record)
 {
    record.level = level;
-   record.timestamp = TimeCurrent();
    record.logger_name = m_name;
    record.message = message;
    record.source_file = file;
    record.source_line = line;
    record.function_name = func;
-   record.thread_id = 0; // MQL5 doesn't have real threads
    record.error_code = error_code;
+   LogStampRecord(record);
 }
 
 //+------------------------------------------------------------------+
@@ -128,11 +127,11 @@ void CLogger::CreateLogRecord(ENUM_LOG_LEVEL level, string message,
 //+------------------------------------------------------------------+
 void CLogger::CheckAutoFlush()
 {
-   if(m_auto_flush_interval > 0 && 
-      TimeCurrent() - m_last_flush_time >= m_auto_flush_interval)
+   if(m_auto_flush_interval > 0 &&
+      GetTickCount64() - m_last_flush_ms >= (ulong)m_auto_flush_interval * 1000)
    {
       Flush();
-      m_last_flush_time = TimeCurrent();
+      m_last_flush_ms = GetTickCount64();
    }
 }
 

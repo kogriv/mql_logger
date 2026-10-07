@@ -29,19 +29,19 @@ void TestFormatters()
       LT_CHECK(StringFind(s, "[Error: 42]") > 0);
       LT_CHECK(StringFind(f.Format(rec), "Error") < 0);
    }
-   LT_KNOWN("format: message text is not altered", "F-20, F-21");
+   LT_CASE("format: message text is not altered");
    {
       CSimpleFormatter s("%level% %message%");
       LT_EQ(s.Format(odd), "INFO a  b   c %file% %level%");
       CDetailedFormatter d("%logger% %message%");
       LT_EQ(d.Format(odd), "mylog a  b   c %file% %level%");
    }
-   LT_KNOWN("format: simple formatter fills %logger%", "F-22");
+   LT_CASE("format: simple formatter fills %logger%");
    {
       CSimpleFormatter f("%logger%: %message%");
       LT_EQ(f.Format(rec), "mylog: hello");
    }
-   LT_KNOWN("format: same record formats to the same string", "F-18");
+   LT_CASE("format: same record formats to the same string");
    {
       CDetailedFormatter f;
       string s1 = f.Format(rec);
@@ -50,6 +50,53 @@ void TestFormatters()
       Sleep(50);
       string s3 = f.Format(rec);
       LT_CHECK(s1 == s2 && s2 == s3);
+   }
+
+   LT_CASE("format: empty fields leave no stray spaces, unknown names stay");
+   {
+      CDetailedFormatter d;
+      string s = d.Format(rec);
+      LT_EQ(StringSubstr(s, StringLen(s) - 18), "hello [F.mq5:7:Fn]");
+      SLogRecord bare = CreateLogRecord(LOG_WARN, "tail  ", "mylog");
+      s = d.Format(bare);
+      LT_EQ(StringSubstr(s, StringLen(s) - 13), "mylog: tail  ");
+      CSimpleFormatter f("%timestamp% [%level%] %message% 100% %nosuch% %error%");
+      f.SetShowTimestamp(false);
+      LT_EQ(f.Format(rec), "[INFO] hello 100% %nosuch%");
+      CSimpleFormatter hidden("%logger%: %message%");
+      hidden.SetShowLoggerName(false);
+      LT_EQ(hidden.Format(rec), ": hello");
+   }
+   LT_CASE("format: time fields");
+   {
+      CSimpleFormatter f("%seq%|%elapsed%|%localtime%");
+      SLogRecord a = CreateLogRecord(LOG_INFO, "a", "t");
+      SLogRecord b = CreateLogRecord(LOG_INFO, "b", "t");
+      LT_EQ(b.sequence, a.sequence + 1);
+      LT_CHECK(b.elapsed_us >= a.elapsed_us);
+      LT_CHECK(a.time_local > 0);
+      string parts[];
+      LT_EQ(StringSplit(f.Format(a), '|', parts), 3);
+      if(ArraySize(parts) == 3)
+      {
+         LT_EQ(parts[0], IntegerToString((long)a.sequence));
+         LT_EQ(parts[1], StringFormat("%.6f", a.elapsed_us / 1000000.0));
+         LT_EQ(parts[2], TimeToString(a.time_local, TIME_DATE | TIME_SECONDS));
+      }
+   }
+   LT_CASE("format: multiline layout");
+   {
+      CDetailedFormatter m("", true);
+      string s = m.Format(err);
+      LT_CHECK(StringFind(s, "=== ERROR ===\nTime: ") == 0);
+      LT_CHECK(StringFind(s, "\nMessage: boom\nSource: F.mq5:9 in Fn()\nError: 42\n================") > 0);
+   }
+   LT_CASE("format: default line of handlers without a formatter");
+   {
+      string s = LogFormatDefault(err);
+      LT_EQ(StringFind(s, TimeToString(err.timestamp, TIME_DATE | TIME_SECONDS) + " [ERROR] mylog: boom [F.mq5:9:Fn] [Error: 42]"), 0);
+      SLogRecord bare = CreateLogRecord(LOG_INFO, "a  b", "");
+      LT_EQ(LogFormatDefault(bare), TimeToString(bare.timestamp, TIME_DATE | TIME_SECONDS) + " [INFO] a  b");
    }
 
    LT_CASE("filter: level minimum, range, exclusion");

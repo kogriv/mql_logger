@@ -24,6 +24,7 @@
 #include "Handlers\SqliteHandler.mqh"
 
 // Formatters
+#include "Formatters\PatternFormatter.mqh"
 #include "Formatters\SimpleFormatter.mqh"
 #include "Formatters\DetailedFormatter.mqh"
 

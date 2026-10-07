@@ -85,11 +85,7 @@ bool CConsoleHandler::Handle(const SLogRecord &record)
    }
    else
    {
-      // Default formatting
-      formatted_message = StringFormat("[%s] %s: %s",
-                                      TimeToString(record.timestamp, TIME_DATE|TIME_SECONDS),
-                                      LogLevelToString(record.level),
-                                      record.message);
+      formatted_message = LogFormatDefault(record);
    }
    
    // Output to console

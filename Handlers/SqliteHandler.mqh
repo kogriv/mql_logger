@@ -12,6 +12,18 @@
 
 //+------------------------------------------------------------------+
 //| SQLite handler - stores logs in SQLite database                |
+//|                                                                  |
+//| Два режима записи:                                               |
+//|  - по записи (auto_commit = true, по умолчанию): каждая запись  |
+//|    сразу в файле базы. Переживает критическую ошибку программы   |
+//|    (array out of range и т. п.) и снятие терминала;             |
+//|  - пакетами (auto_commit = false): коммит раз в batch_size       |
+//|    записей, в Flush() и при закрытии. Быстрее, но при            |
+//|    критической ошибке программы незакоммиченный хвост пропадает: |
+//|    деструкторы в этом случае не вызываются.                      |
+//| Сброс на диск: по умолчанию synchronous = NORMAL (запись может  |
+//| пропасть только при отключении питания); SetDurable(true) —      |
+//| FULL, каждая запись ждёт диск (в десятки раз медленнее).         |
 //+------------------------------------------------------------------+
 class CSqliteHandler : public ILogHandler
 {
@@ -29,16 +41,19 @@ private:
    int               m_pending_records;   // Records pending commit
    bool              m_in_transaction;    // Explicit transaction is open
    bool              m_create_indexes;    // Create performance indexes
+   bool              m_durable;           // synchronous = FULL instead of NORMAL
+   int               m_failed;            // Records that were not stored
    
    bool              OpenDatabase();
    void              CloseDatabase();
    bool              CreateTable();
-   bool              CreateIndexes();
    bool              InsertRecord(const SLogRecord &record);
    void              CommitBatch();
    bool              BeginTransaction();
    bool              CommitTransaction();
-   string            EscapeSqlString(string text);  // Изменено: input -> text
+   bool              AddMissingColumns();
+   string            EscapeSqlString(string text);
+   void              ApplySynchronous();
 
 public:
                      CSqliteHandler(string database_path, string table_name = "logs", 
@@ -59,13 +74,18 @@ public:
    bool              GetAutoCommit() const { return m_auto_commit; }
    void              SetBatchSize(int batch_size) { m_batch_size = batch_size; }
    int               GetBatchSize() const { return m_batch_size; }
-   void              SetCreateIndexes(bool create_indexes) { m_create_indexes = create_indexes; }
+   void              SetCreateIndexes(bool create_indexes);
    bool              GetCreateIndexes() const { return m_create_indexes; }
    string            GetDatabasePath() const { return m_database_path; }
    string            GetTableName() const { return m_table_name; }
    void              Enable(bool enabled) { m_enabled = enabled; }
+   void              SetDurable(bool durable);
+   bool              GetDurable() const { return m_durable; }
+   bool              IsOpen() const { return m_database_handle != INVALID_HANDLE; }
+   int               FailedCount() const { return m_failed; }
    
    // Utility methods
+   bool              CreateIndexes();
    bool              ExecuteQuery(string query);
    int               GetRecordCount();
    bool              ClearOldRecords(int days_to_keep);
@@ -87,7 +107,9 @@ CSqliteHandler::CSqliteHandler(string database_path, string table_name = "logs",
    m_batch_size(batch_size),
    m_pending_records(0),
    m_in_transaction(false),
-   m_create_indexes(true)
+   m_create_indexes(false),
+   m_durable(false),
+   m_failed(0)
 {
    OpenDatabase();
 }
@@ -116,16 +138,14 @@ bool CSqliteHandler::OpenDatabase()
       return false;
    }
    
+   // Must be set before the first transaction
+   ApplySynchronous();
+   
    // Create table and indexes
-   if(!CreateTable())
+   if(!CreateTable() || !AddMissingColumns())
    {
       CloseDatabase();
       return false;
-   }
-   
-   if(m_create_indexes && !CreateIndexes())
-   {
-      PrintFormat("Warning: Failed to create indexes for table %s", m_table_name);
    }
    
    // Begin transaction if not auto-committing
@@ -218,10 +238,86 @@ bool CSqliteHandler::CreateTable()
       "thread_id INTEGER, "
       "error_code INTEGER, "
       "timestamp INTEGER NOT NULL, "
-      "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+      "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+      "time_local INTEGER, "
+      "elapsed_us INTEGER, "
+      "seq INTEGER"
       ")", m_table_name);
    
    return ExecuteQuery(create_sql);
+}
+
+//+------------------------------------------------------------------+
+//| Table of an older version: add the columns it lacks             |
+//|   time_local - computer time, seconds                           |
+//|   elapsed_us - microseconds since the program started           |
+//|   seq        - record number within the program                 |
+//+------------------------------------------------------------------+
+bool CSqliteHandler::AddMissingColumns()
+{
+   string wanted[] = {"time_local", "elapsed_us", "seq"};
+   bool present[3] = {false, false, false};
+   
+   int request = DatabasePrepare(m_database_handle, StringFormat("PRAGMA table_info(%s)", m_table_name));
+   if(request == INVALID_HANDLE)
+      return false;
+   while(DatabaseRead(request))
+   {
+      string column;
+      if(!DatabaseColumnText(request, 1, column))
+         continue;
+      for(int i = 0; i < 3; i++)
+         if(column == wanted[i])
+            present[i] = true;
+   }
+   DatabaseFinalize(request);
+   
+   for(int i = 0; i < 3; i++)
+   {
+      if(!present[i] &&
+         !ExecuteQuery(StringFormat("ALTER TABLE %s ADD COLUMN %s INTEGER", m_table_name, wanted[i])))
+         return false;
+   }
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| Disk sync mode; cannot be changed inside a transaction          |
+//+------------------------------------------------------------------+
+void CSqliteHandler::ApplySynchronous()
+{
+   if(m_database_handle == INVALID_HANDLE)
+      return;
+   
+   bool reopen = m_in_transaction;
+   if(reopen)
+      CommitTransaction();
+   ExecuteQuery(m_durable ? "PRAGMA synchronous = FULL" : "PRAGMA synchronous = NORMAL");
+   if(reopen)
+      BeginTransaction();
+}
+
+//+------------------------------------------------------------------+
+//| true - every commit waits for the disk                          |
+//+------------------------------------------------------------------+
+void CSqliteHandler::SetDurable(bool durable)
+{
+   if(m_durable == durable)
+      return;
+   m_durable = durable;
+   ApplySynchronous();
+}
+
+//+------------------------------------------------------------------+
+//| Индексы ускоряют выборки и вдвое замедляют запись, поэтому по   |
+//| умолчанию не создаются: вызовите SetCreateIndexes(true) или      |
+//| CreateIndexes() перед разбором журнала. Созданные остаются.      |
+//+------------------------------------------------------------------+
+void CSqliteHandler::SetCreateIndexes(bool create_indexes)
+{
+   m_create_indexes = create_indexes;
+   if(m_create_indexes && m_database_handle != INVALID_HANDLE)
+      CreateIndexes();
 }
 
 //+------------------------------------------------------------------+
@@ -229,22 +325,24 @@ bool CSqliteHandler::CreateTable()
 //+------------------------------------------------------------------+
 bool CSqliteHandler::CreateIndexes()
 {
-   string index_queries[4];
-   index_queries[0] = StringFormat("CREATE INDEX IF NOT EXISTS idx_%s_timestamp ON %s(timestamp)", m_table_name, m_table_name);
-   index_queries[1] = StringFormat("CREATE INDEX IF NOT EXISTS idx_%s_level ON %s(level)", m_table_name, m_table_name);
-   index_queries[2] = StringFormat("CREATE INDEX IF NOT EXISTS idx_%s_logger ON %s(logger_name)", m_table_name, m_table_name);
-   index_queries[3] = StringFormat("CREATE INDEX IF NOT EXISTS idx_%s_created ON %s(created_at)", m_table_name, m_table_name);
+   if(m_database_handle == INVALID_HANDLE)
+      return false;
    
-   for(int i = 0; i < 4; i++)
-   {
-      if(!ExecuteQuery(index_queries[i]))
-      {
-         PrintFormat("Failed to create index: %s", index_queries[i]);
-         return false;
-      }
-   }
+   // Not inside the logging transaction
+   bool reopen = m_in_transaction;
+   if(reopen)
+      CommitTransaction();
    
-   return true;
+   string columns[4] = {"timestamp", "level", "logger_name", "created_at"};
+   string names[4] = {"timestamp", "level", "logger", "created"};
+   bool ok = true;
+   for(int i = 0; i < 4 && ok; i++)
+      ok = ExecuteQuery(StringFormat("CREATE INDEX IF NOT EXISTS idx_%s_%s ON %s(%s)",
+                                     m_table_name, names[i], m_table_name, columns[i]));
+   
+   if(reopen)
+      BeginTransaction();
+   return ok;
 }
 
 //+------------------------------------------------------------------+
@@ -269,9 +367,12 @@ bool CSqliteHandler::ExecuteQuery(string query)
 //+------------------------------------------------------------------+
 bool CSqliteHandler::InsertRecord(const SLogRecord &record)
 {
+   // Текстом, а не подготовленным запросом: DatabaseRead() после INSERT оставляет в _LastError код 5126
+   // («данных больше нет») и стирал бы код ошибки вызывающего. Выигрыш подготовленного запроса — 20 мкс.
    string insert_sql = StringFormat(
-      "INSERT INTO %s (ticktime, level, logger_name, message, source_file, source_line, function_name, thread_id, error_code, timestamp) "
-      "VALUES ('%s', %d, '%s', '%s', '%s', %d, '%s', %d, %d, %d)",
+      "INSERT INTO %s (ticktime, level, logger_name, message, source_file, source_line, function_name, "
+      "thread_id, error_code, timestamp, time_local, elapsed_us, seq) "
+      "VALUES ('%s', %d, '%s', '%s', '%s', %d, '%s', %d, %d, %I64d, %I64d, %I64u, %I64u)",
       m_table_name,
       TimeToString(record.timestamp, TIME_DATE|TIME_SECONDS),
       (int)record.level,
@@ -282,11 +383,20 @@ bool CSqliteHandler::InsertRecord(const SLogRecord &record)
       EscapeSqlString(record.function_name),
       record.thread_id,
       record.error_code,
-      (int)record.timestamp
+      (long)record.timestamp,
+      (long)record.time_local,
+      record.elapsed_us,
+      record.sequence
    );
    
-   if(!ExecuteQuery(insert_sql))
+   if(m_database_handle == INVALID_HANDLE || !DatabaseExecute(m_database_handle, insert_sql))
+   {
+      m_failed++;
+      if(m_failed == 1)
+         PrintFormat("Logger: cannot write to %s, error %d; further failures are only counted (FailedCount)",
+                     m_database_path, GetLastError());
       return false;
+   }
    
    m_pending_records++;
    
@@ -297,6 +407,15 @@ bool CSqliteHandler::InsertRecord(const SLogRecord &record)
       CommitBatch();
    
    return true;
+}
+
+//+------------------------------------------------------------------+
+//| Escape a string for an SQL literal                              |
+//+------------------------------------------------------------------+
+string CSqliteHandler::EscapeSqlString(string text)
+{
+   StringReplace(text, "'", "''");
+   return text;
 }
 
 //+------------------------------------------------------------------+
@@ -313,16 +432,6 @@ void CSqliteHandler::CommitBatch()
       BeginTransaction();
    }
    m_pending_records = 0;
-}
-
-//+------------------------------------------------------------------+
-//| Escape SQL string to prevent injection                         |
-//+------------------------------------------------------------------+
-string CSqliteHandler::EscapeSqlString(string text)  // Изменено: input -> text
-{
-   string output = text;  // Изменено: input -> text
-   StringReplace(output, "'", "''");  // Escape single quotes
-   return output;
 }
 
 //+------------------------------------------------------------------+
@@ -426,8 +535,8 @@ bool CSqliteHandler::ClearOldRecords(int days_to_keep)
    
    datetime cutoff_time = TimeCurrent() - (days_to_keep * 24 * 3600);
    
-   string delete_sql = StringFormat("DELETE FROM %s WHERE timestamp < %d", 
-                                   m_table_name, (int)cutoff_time);
+   string delete_sql = StringFormat("DELETE FROM %s WHERE timestamp < %I64d", 
+                                   m_table_name, (long)cutoff_time);
    
    return ExecuteQuery(delete_sql);
 }
