@@ -179,6 +179,20 @@ bool LtReadText(const string name, string &text)
 }
 
 //+------------------------------------------------------------------+
+//| Файл начинается с метки UTF-16                                   |
+//+------------------------------------------------------------------+
+bool LtIsUtf16(const string name)
+{
+   int h = FileOpen(name, FILE_READ | FILE_BIN | FILE_SHARE_READ | FILE_SHARE_WRITE);
+   if(h == INVALID_HANDLE)
+      return false;
+   uchar b[];
+   FileReadArray(h, b, 0, 2);
+   FileClose(h);
+   return ArraySize(b) >= 2 && b[0] == 0xFF && b[1] == 0xFE;
+}
+
+//+------------------------------------------------------------------+
 //| Непустые строки файла; -1 — файл не открылся                    |
 //+------------------------------------------------------------------+
 int LtReadLines(const string name, string &lines[])

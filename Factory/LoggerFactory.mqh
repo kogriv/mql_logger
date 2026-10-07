@@ -90,7 +90,8 @@ public:
    
    // Handler creation methods
    static CConsoleHandler*   CreateConsoleHandler(bool use_print = true, bool show_alerts = false);
-   static CFileHandler*      CreateFileHandler(string filename, bool append = true, bool auto_flush = false);
+   static CFileHandler*      CreateFileHandler(string filename, bool append = true, bool auto_flush = false,
+                                               bool common = false, bool unicode = false);
    static CSqliteHandler*    CreateSqliteHandler(string database_path, string table_name = "logs");
    
    // Formatter creation methods
@@ -321,7 +322,8 @@ CConsoleHandler* CLoggerFactory::CreateConsoleHandler(bool use_print = true, boo
 //+------------------------------------------------------------------+
 //| Create file handler                                            |
 //+------------------------------------------------------------------+
-CFileHandler* CLoggerFactory::CreateFileHandler(string filename, bool append = true, bool auto_flush = false)
+CFileHandler* CLoggerFactory::CreateFileHandler(string filename, bool append = true, bool auto_flush = false,
+                                                bool common = false, bool unicode = false)
 {
    Initialize();
    
@@ -330,7 +332,7 @@ CFileHandler* CLoggerFactory::CreateFileHandler(string filename, bool append = t
       filename = GenerateLogFileName();
    }
    
-   CFileHandler* handler = new CFileHandler(filename, append, auto_flush);
+   CFileHandler* handler = new CFileHandler(filename, append, auto_flush, common, unicode);
    if(handler != NULL)
    {
       RegisterHandler(handler);
