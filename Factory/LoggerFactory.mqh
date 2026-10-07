@@ -130,7 +130,7 @@ public:
                                           bool db_auto_commit, int db_batch_size);
    
    // Profile-based logger creation
-   static CLogger*   CreateProfileLogger(string name, ENUM_LOGGER_PROFILE profile);
+   static CLogger*   CreateProfileLogger(string name, ENUM_LOGGER_PROFILE profile, string db_file = "");
    
    // Management methods
    static void       FlushAll();
@@ -146,6 +146,7 @@ public:
    // Utility methods
    static string     GenerateLogFileName(string base_name = "");
    static string     GenerateDbFileName(string base_name = "");
+   static string     RunFileName(string base_name, string extension);
    static bool       IsValidLoggerName(string name);
 };
 
@@ -678,7 +679,7 @@ CLogger* CLoggerFactory::CreateCompositeLogger(string name, bool console, string
 //+------------------------------------------------------------------+
 //| Create logger with predefined profile                          |
 //+------------------------------------------------------------------+
-CLogger* CLoggerFactory::CreateProfileLogger(string name, ENUM_LOGGER_PROFILE profile)
+CLogger* CLoggerFactory::CreateProfileLogger(string name, ENUM_LOGGER_PROFILE profile, string db_file = "")
 {
    Initialize();
    
@@ -690,88 +691,61 @@ CLogger* CLoggerFactory::CreateProfileLogger(string name, ENUM_LOGGER_PROFILE pr
    if(existing != NULL)
       return existing;
    
-   // Create base logger configuration
-   SLoggerConfig cfg;
-   cfg.console_output = false;      // Don't add default handler
-   cfg.level = LOG_TRACE;           // Set per profile below: the lowest level of its handlers
-   
-   CLogger* logger = CLoggerFactory::CreateLogger(name, cfg);
-   if(logger == NULL)
-   {
-      PrintFormat("Failed to create profile logger: %s", name);
-      return NULL;
-   }
-   
-   // Configure based on profile
+   // Из чего состоит профиль: журнал терминала от WARN — всегда, база — от своего уровня
+   bool with_db = false;
+   ENUM_LOG_LEVEL db_level = LOG_WARN;
+   string title = "";
    switch(profile)
    {
       case LOGGER_PROFILE_DEBUG:
-         {
-            // Console(WARN) + Database(TRACE) - full debug logging
-            CConsoleHandler* console_handler = CreateConsoleHandler();
-            if(console_handler != NULL)
-            {
-               console_handler.SetLevel(LOG_WARN);
-               logger.AddHandler(console_handler);
-            }
-            
-            CSqliteHandler* db_handler = CreateSqliteHandler(name + ".db");
-            if(db_handler != NULL)
-            {
-               db_handler.SetLevel(LOG_TRACE);
-               logger.AddHandler(db_handler);
-            }
-            
-            logger.SetLevel(LOG_TRACE);
-            logger.Log(LOG_INFO, StringFormat("Logger '%s' initialized with DEBUG profile (Console:WARN + DB:TRACE)", name), 0, "", 0, "");
-            break;
-         }
-         
+         with_db = true;
+         db_level = LOG_TRACE;
+         title = "DEBUG profile (Console:WARN + DB:TRACE)";
+         break;
       case LOGGER_PROFILE_PERFORMANCE:
-         {
-            // Console(WARN) only - fast mode for optimization
-            CConsoleHandler* console_handler = CreateConsoleHandler();
-            if(console_handler != NULL)
-            {
-               console_handler.SetLevel(LOG_WARN);
-               logger.AddHandler(console_handler);
-            }
-            
-            // The logger itself rejects everything below WARN: a disabled call costs one comparison
-            logger.SetLevel(LOG_WARN);
-            logger.Log(LOG_INFO, StringFormat("Logger '%s' initialized with PERFORMANCE profile (Console:WARN only)", name), 0, "", 0, "");
-            break;
-         }
-         
+         title = "PERFORMANCE profile (Console:WARN only)";
+         break;
       case LOGGER_PROFILE_PRODUCTION:
-         {
-            // Console(WARN) + Database(INFO) - production logging
-            CConsoleHandler* console_handler = CreateConsoleHandler();
-            if(console_handler != NULL)
-            {
-               console_handler.SetLevel(LOG_WARN);
-               logger.AddHandler(console_handler);
-            }
-            
-            CSqliteHandler* db_handler = CreateSqliteHandler(name + ".db");
-            if(db_handler != NULL)
-            {
-               db_handler.SetLevel(LOG_INFO);
-               logger.AddHandler(db_handler);
-            }
-            
-            logger.SetLevel(LOG_INFO);
-            logger.Log(LOG_INFO, StringFormat("Logger '%s' initialized with PRODUCTION profile (Console:WARN + DB:INFO)", name), 0, "", 0, "");
-            break;
-         }
-         
+         with_db = true;
+         db_level = LOG_INFO;
+         title = "PRODUCTION profile (Console:WARN + DB:INFO)";
+         break;
       default:
-         {
-            PrintFormat("Unknown logger profile: %d", profile);
-            RemoveLogger(name);
-            return NULL;
-         }
+         PrintFormat("Unknown logger profile: %d", profile);
+         return NULL;
    }
+   
+   SLoggerConfig cfg;
+   cfg.console_output = false;      // handlers are added below
+   CLogger* logger = CreateLogger(name, cfg);
+   if(logger == NULL)
+      return NULL;
+   
+   CConsoleHandler* console_handler = CreateConsoleHandler();
+   if(console_handler != NULL)
+   {
+      console_handler.SetLevel(LOG_WARN);
+      logger.AddHandler(console_handler);
+   }
+   
+   if(with_db)
+   {
+      // База — в режиме «по записи»: переживает критическую ошибку программы
+      CSqliteHandler* db_handler = CreateSqliteHandler(StringLen(db_file) > 0 ? db_file : name + ".db");
+      if(db_handler != NULL)
+      {
+         db_handler.SetLevel(db_level);
+         // В тестере база начинается заново с каждым проходом: иначе проходы одного советника копятся
+         // в одном файле (профиль DEBUG — десятки мегабайт за проход)
+         if(MQLInfoInteger(MQL_TESTER))
+            db_handler.Clear();
+         logger.AddHandler(db_handler);
+      }
+   }
+   
+   // Уровень логгера — наименьший из уровней обработчиков: всё, что ниже, отсекается одной проверкой
+   logger.SetLevel(with_db ? db_level : LOG_WARN);
+   logger.Log(LOG_INFO, StringFormat("Logger '%s' initialized with %s", name, title), 0, "", 0, "");
    
    return logger;
 }
@@ -970,6 +944,26 @@ string CLoggerFactory::GenerateDbFileName(string base_name = "")
    }
    
    return StringFormat("%s.db", base_name);
+}
+
+//+------------------------------------------------------------------+
+//| Имя файла этого запуска: <имя>_<символ>_<период>_<дата>_<время>.<расширение>
+//|   RunFileName("MyEA", "log") -> MyEA_EURUSD_H1_20261007_143005.log
+//| Время — часы компьютера (в тестере — время начала теста).       |
+//+------------------------------------------------------------------+
+string CLoggerFactory::RunFileName(string base_name, string extension)
+{
+   if(StringLen(base_name) == 0)
+      base_name = "logger";
+   
+   string period = EnumToString((ENUM_TIMEFRAMES)_Period);
+   StringReplace(period, "PERIOD_", "");
+   
+   MqlDateTime now;
+   TimeToStruct(TimeLocal(), now);
+   
+   return StringFormat("%s_%s_%s_%04d%02d%02d_%02d%02d%02d.%s", base_name, _Symbol, period,
+                       now.year, now.mon, now.day, now.hour, now.min, now.sec, extension);
 }
 
 //+------------------------------------------------------------------+

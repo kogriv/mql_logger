@@ -6,7 +6,7 @@
 - Выключенный уровень стоит одной проверки: строка сообщения не строится (0,01 мкс на вызов).
 - Запись в базу переживает критическую ошибку программы (`array out of range` и подобные).
 - Журналы проходов оптимизации, в том числе с удалённых агентов, собираются в терминале.
-- Тесты: 57 случаев, `Tests/`.
+- Тесты: 60 случаев, `Tests/`.
 
 ## Установка
 
@@ -138,6 +138,13 @@ input ENUM_LOGGER_PROFILE InpLogProfile = LOGGER_PROFILE_PERFORMANCE;
 g_logger = CLoggerFactory::CreateProfileLogger("MyExpert", InpLogProfile);
 ```
 
+- **В тестере база профиля начинается заново с каждым проходом** — в ней журнал последнего прохода (иначе проходы
+  копятся: профиль `DEBUG` пишет десятки мегабайт за проход). На графике база дописывается.
+- Третий параметр — своё имя файла базы: `CreateProfileLogger("MyExpert", InpLogProfile, "MyExpert_EURUSD.db")`.
+- `CLoggerFactory::RunFileName("MyExpert", "db")` даёт имя этого запуска:
+  `MyExpert_EURUSD_H1_20261007_143005.db` (символ, период, дата и время по часам компьютера; в тестере — время
+  начала теста).
+
 ## Обработчики
 
 Обработчик получает запись, проверяет свой уровень и фильтр и выводит её. К логгеру можно добавить несколько
@@ -189,7 +196,7 @@ CSqliteHandler* db = CLoggerFactory::CreateSqliteHandler("ea.db", "logs", /*auto
 - Коммит пакета — каждые `batch_size` записей, в `Flush()` и при закрытии.
 - Индексы при записи не создаются (с ними запись вдвое медленнее). Перед разбором большого журнала —
   `db.SetCreateIndexes(true)` или запрос `CREATE INDEX`.
-- `GetRecordCount()`, `ClearOldRecords(days)`, `ExecuteQuery(sql)`, `FailedCount()`.
+- `GetRecordCount()`, `Clear()`, `ClearOldRecords(days)`, `ExecuteQuery(sql)`, `FailedCount()`.
 
 Таблица (`logs`):
 

@@ -19,6 +19,7 @@
 #include "Cases\TestFormatters.mqh"
 #include "Cases\TestFactory.mqh"
 #include "Cases\TestMacros.mqh"
+#include "Cases\TestExamples.mqh"
 
 //+------------------------------------------------------------------+
 //| Script program start function                                    |
@@ -33,6 +34,7 @@ void OnStart()
    TestFormatters();
    TestFactory();
    TestMacros();
+   TestExamples();
    CLoggerFactory::Shutdown();
    LtCleanup();
    LT.Finish();

@@ -150,6 +150,23 @@ void TestSqlite()
       delete b;
       LT_EQ(LtDbLong("lgt_two.db", "SELECT COUNT(*) FROM logs"), 40);
    }
+   //--- очистка
+   LT_CASE("sqlite: Clear empties the table in both write modes");
+   {
+      CSqliteHandler* h = new CSqliteHandler("lgt_clear.db");
+      for(int i = 0; i < 5; i++)
+         h.Handle(CreateLogRecord(LOG_INFO, "rec", "lgt"));
+      LT_CHECK(h.Clear());
+      LT_EQ(h.GetRecordCount(), 0);
+      h.SetAutoCommit(false);
+      ResetLastError();
+      h.Handle(CreateLogRecord(LOG_INFO, "rec", "lgt"));
+      LT_CHECK(h.Clear());
+      h.Handle(CreateLogRecord(LOG_INFO, "kept", "lgt"));
+      LT_EQ(GetLastError(), 0);
+      delete h;
+      LT_EQ(LtDbLong("lgt_clear.db", "SELECT COUNT(*) FROM logs"), 1);
+   }
    //--- режим сброса на диск
    LT_CASE("sqlite: durable mode can be switched in both write modes");
    {

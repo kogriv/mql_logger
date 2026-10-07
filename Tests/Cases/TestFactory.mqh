@@ -134,6 +134,23 @@ void TestFactory()
       CLoggerFactory::Shutdown();
       LT_EQ(LtDbLong("lgt_dbg.db", "SELECT COUNT(*) FROM logs WHERE level=0"), 1);
    }
+   LT_CASE("factory: profile with its own database file, file name of the run");
+   {
+      CLogger* lg = CLoggerFactory::CreateProfileLogger("lgt_pf", LOGGER_PROFILE_PRODUCTION, "lgt_custom_name.db");
+      LT_CHECK(lg != NULL);
+      lg.Info("one");
+      CLoggerFactory::Shutdown();
+      LT_CHECK(!FileIsExist("lgt_pf.db"));
+      LT_EQ(LtDbLong("lgt_custom_name.db", "SELECT COUNT(*) FROM logs"), 2);
+      LT_CHECK(CLoggerFactory::CreateProfileLogger("lgt_pf2", (ENUM_LOGGER_PROFILE)99) == NULL);
+      LT_EQ(CLoggerFactory::GetLoggerCount(), 0);
+      string name = CLoggerFactory::RunFileName("lgt_run", "log");
+      string parts[];
+      LT_EQ(StringSplit(name, '_', parts), 6);                 // lgt, run, символ, период, дата, время.log
+      LT_EQ(StringFind(name, "lgt_run_" + _Symbol + "_"), 0);
+      LT_EQ(StringSubstr(name, StringLen(name) - 4), ".log");
+      LT_EQ(StringLen(parts[ArraySize(parts) - 2]), 8);
+   }
    LT_CASE("factory: profile sets the logger level to the lowest handler level");
    {
       CLogger* perf = CLoggerFactory::CreateProfileLogger("lgt_perf2", LOGGER_PROFILE_PERFORMANCE);

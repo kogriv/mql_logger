@@ -88,6 +88,7 @@ public:
    bool              ExecuteQuery(string query);
    int               GetRecordCount();
    bool              ClearOldRecords(int days_to_keep);
+   bool              Clear();                             // delete every record of the table
 };
 
 //+------------------------------------------------------------------+
@@ -538,4 +539,22 @@ bool CSqliteHandler::ClearOldRecords(int days_to_keep)
                                    m_table_name, (long)cutoff_time);
    
    return ExecuteQuery(delete_sql);
+}
+
+//+------------------------------------------------------------------+
+//| Delete every record (the file keeps its size and is reused)     |
+//+------------------------------------------------------------------+
+bool CSqliteHandler::Clear()
+{
+   if(m_database_handle == INVALID_HANDLE)
+      return false;
+   
+   bool reopen = m_in_transaction;
+   if(reopen)
+      CommitTransaction();
+   m_pending_records = 0;
+   bool ok = ExecuteQuery(StringFormat("DELETE FROM %s", m_table_name));
+   if(reopen)
+      BeginTransaction();
+   return ok;
 }
