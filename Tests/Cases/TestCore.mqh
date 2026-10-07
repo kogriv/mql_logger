@@ -67,7 +67,7 @@ void TestCore()
       LT_CHECK(b.m_closed);
    }
    //--- запись из обработчика в другой логгер
-   LT_KNOWN("core: record written from a handler reaches another logger", "F-14");
+   LT_CASE("core: record written from a handler reaches another logger");
    {
       CRelayHandler relay;
       CCaptureHandler sink;
@@ -89,8 +89,11 @@ void TestCore()
       relay.m_target = lg;
       lg.AddHandler(GetPointer(relay));
       lg.Info("x");
-      LT_CHECK(relay.m_count >= 1);
-      LT_CHECK(relay.m_count < 100);
+      LT_EQ(relay.m_count, LOGGER_MAX_DEPTH);
+      LT_EQ(lg.DroppedCount(), 1);
+      lg.Info("y");
+      LT_EQ(relay.m_count, 2 * LOGGER_MAX_DEPTH);
+      LT_EQ(lg.DroppedCount(), 2);
       CLoggerFactory::Shutdown();
    }
 }

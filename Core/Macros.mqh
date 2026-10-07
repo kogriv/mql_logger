@@ -10,129 +10,75 @@
 
 //+------------------------------------------------------------------+
 //| Convenience macros for logging with source information          |
+//|                                                                  |
+//| Все макросы сначала проверяют уровень и только потом вычисляют  |
+//| сообщение: выключенный вызов стоит одной проверки, строка       |
+//| (StringFormat и т. п.) не строится.                             |
+//|                                                                  |
+//|   LOGINFO(msg)            логгер "default"                      |
+//|   LOGINFO_N("name", msg)  логгер по имени (поиск на каждый вызов)|
+//|   LOGINFO_TO(ptr, msg)    указатель на логгер; NULL — ничего    |
 //+------------------------------------------------------------------+
 
-// Get default logger
-// #define GET_LOGGER() CLoggerFactory::GetLogger("default")
-
-// Basic logging macros with source tracing - используем числовые значения
-#define LOGTRACE(message) \
+// Общая часть. Имена внутренних переменных не должны встречаться у вызывающего.
+#define LOGGER_WRITE(logger_ptr, level, message, error_code) \
    do { \
-      ILogger* logger = CLoggerFactory::GetLogger("default"); \
-      if(logger != NULL) \
-         logger.Log((ENUM_LOG_LEVEL)0, message, 0, __FILE__, __LINE__, __FUNCTION__); \
+      ILogger* _lg_logger_ = (logger_ptr); \
+      if(_lg_logger_ != NULL && _lg_logger_.IsEnabled(level)) \
+         _lg_logger_.Log(level, message, error_code, __FILE__, __LINE__, __FUNCTION__); \
    } while(0)
 
-#define LOGDEBUG(message) \
+// То же с кодом последней ошибки: он читается первым, до любых действий логгера
+#define LOGGER_WRITE_LAST_ERROR(logger_ptr, level, message) \
    do { \
-      ILogger* logger = CLoggerFactory::GetLogger("default"); \
-      if(logger != NULL) \
-         logger.Log((ENUM_LOG_LEVEL)1, message, 0, __FILE__, __LINE__, __FUNCTION__); \
+      int _lg_error_ = GetLastError(); \
+      ILogger* _lg_logger_ = (logger_ptr); \
+      if(_lg_logger_ != NULL && _lg_logger_.IsEnabled(level)) \
+         _lg_logger_.Log(level, message, _lg_error_, __FILE__, __LINE__, __FUNCTION__); \
    } while(0)
 
-#define LOGINFO(message) \
-   do { \
-      ILogger* logger = CLoggerFactory::GetLogger("default"); \
-      if(logger != NULL) \
-         logger.Log((ENUM_LOG_LEVEL)2, message, 0, __FILE__, __LINE__, __FUNCTION__); \
-   } while(0)
+// Logger given by pointer (ILogger* or CLogger*); a NULL pointer is allowed
+#define LOGTRACE_TO(logger_ptr, message)  LOGGER_WRITE(logger_ptr, LOG_TRACE, message, 0)
+#define LOGDEBUG_TO(logger_ptr, message)  LOGGER_WRITE(logger_ptr, LOG_DEBUG, message, 0)
+#define LOGINFO_TO(logger_ptr, message)   LOGGER_WRITE(logger_ptr, LOG_INFO, message, 0)
+#define LOGWARN_TO(logger_ptr, message)   LOGGER_WRITE(logger_ptr, LOG_WARN, message, 0)
+#define LOGERROR_TO(logger_ptr, message)  LOGGER_WRITE_LAST_ERROR(logger_ptr, LOG_ERROR, message)
+#define LOGFATAL_TO(logger_ptr, message)  LOGGER_WRITE_LAST_ERROR(logger_ptr, LOG_FATAL, message)
+#define LOGERROR_CODE_TO(logger_ptr, message, error_code)  LOGGER_WRITE(logger_ptr, LOG_ERROR, message, error_code)
+#define LOGFATAL_CODE_TO(logger_ptr, message, error_code)  LOGGER_WRITE(logger_ptr, LOG_FATAL, message, error_code)
 
-#define LOGWARN(message) \
-   do { \
-      ILogger* logger = CLoggerFactory::GetLogger("default"); \
-      if(logger != NULL) \
-         logger.Log((ENUM_LOG_LEVEL)3, message, 0, __FILE__, __LINE__, __FUNCTION__); \
-   } while(0)
+// Logger "default" (kept by the factory, no lookup by name)
+#define LOGTRACE(message)  LOGTRACE_TO(CLoggerFactory::Default(), message)
+#define LOGDEBUG(message)  LOGDEBUG_TO(CLoggerFactory::Default(), message)
+#define LOGINFO(message)   LOGINFO_TO(CLoggerFactory::Default(), message)
+#define LOGWARN(message)   LOGWARN_TO(CLoggerFactory::Default(), message)
+#define LOGERROR(message)  LOGERROR_TO(CLoggerFactory::Default(), message)
+#define LOGFATAL(message)  LOGFATAL_TO(CLoggerFactory::Default(), message)
+#define LOGERROR_CODE(message, error_code)  LOGERROR_CODE_TO(CLoggerFactory::Default(), message, error_code)
+#define LOGFATAL_CODE(message, error_code)  LOGFATAL_CODE_TO(CLoggerFactory::Default(), message, error_code)
 
-#define LOGERROR(message) \
-   do { \
-      ILogger* logger = CLoggerFactory::GetLogger("default"); \
-      if(logger != NULL) \
-         logger.Log((ENUM_LOG_LEVEL)4, message, GetLastError(), __FILE__, __LINE__, __FUNCTION__); \
-   } while(0)
+// Named logger (found by name on every call - keep a pointer and use ..._TO in hot code)
+#define LOGTRACE_N(logger_name, message)  LOGTRACE_TO(CLoggerFactory::GetLogger(logger_name), message)
+#define LOGDEBUG_N(logger_name, message)  LOGDEBUG_TO(CLoggerFactory::GetLogger(logger_name), message)
+#define LOGINFO_N(logger_name, message)   LOGINFO_TO(CLoggerFactory::GetLogger(logger_name), message)
+#define LOGWARN_N(logger_name, message)   LOGWARN_TO(CLoggerFactory::GetLogger(logger_name), message)
+#define LOGERROR_N(logger_name, message)  LOGERROR_TO(CLoggerFactory::GetLogger(logger_name), message)
+#define LOGFATAL_N(logger_name, message)  LOGFATAL_TO(CLoggerFactory::GetLogger(logger_name), message)
 
-#define LOGERROR_CODE(message, error_code) \
-   do { \
-      ILogger* logger = CLoggerFactory::GetLogger("default"); \
-      if(logger != NULL) \
-         logger.Log((ENUM_LOG_LEVEL)4, message, error_code, __FILE__, __LINE__, __FUNCTION__); \
-   } while(0)
-
-#define LOGFATAL(message) \
-   do { \
-      ILogger* logger = CLoggerFactory::GetLogger("default"); \
-      if(logger != NULL) \
-         logger.Log((ENUM_LOG_LEVEL)5, message, GetLastError(), __FILE__, __LINE__, __FUNCTION__); \
-   } while(0)
-
-#define LOGFATAL_CODE(message, error_code) \
-   do { \
-      ILogger* logger = CLoggerFactory::GetLogger("default"); \
-      if(logger != NULL) \
-         logger.Log((ENUM_LOG_LEVEL)5, message, error_code, __FILE__, __LINE__, __FUNCTION__); \
-   } while(0)
-
-// Named logger macros
-#define LOGTRACE_N(logger_name, message) \
-   do { \
-      ILogger* logger = CLoggerFactory::GetLogger(logger_name); \
-      if(logger != NULL) \
-         logger.Log((ENUM_LOG_LEVEL)0, message, 0, __FILE__, __LINE__, __FUNCTION__); \
-   } while(0)
-
-#define LOGDEBUG_N(logger_name, message) \
-   do { \
-      ILogger* logger = CLoggerFactory::GetLogger(logger_name); \
-      if(logger != NULL) \
-         logger.Log((ENUM_LOG_LEVEL)1, message, 0, __FILE__, __LINE__, __FUNCTION__); \
-   } while(0)
-
-#define LOGINFO_N(logger_name, message) \
-   do { \
-      ILogger* logger = CLoggerFactory::GetLogger(logger_name); \
-      if(logger != NULL) \
-         logger.Log((ENUM_LOG_LEVEL)2, message, 0, __FILE__, __LINE__, __FUNCTION__); \
-   } while(0)
-
-#define LOGWARN_N(logger_name, message) \
-   do { \
-      ILogger* logger = CLoggerFactory::GetLogger(logger_name); \
-      if(logger != NULL) \
-         logger.Log((ENUM_LOG_LEVEL)3, message, 0, __FILE__, __LINE__, __FUNCTION__); \
-   } while(0)
-
-#define LOGERROR_N(logger_name, message) \
-   do { \
-      ILogger* logger = CLoggerFactory::GetLogger(logger_name); \
-      if(logger != NULL) \
-         logger.Log((ENUM_LOG_LEVEL)4, message, GetLastError(), __FILE__, __LINE__, __FUNCTION__); \
-   } while(0)
-
-#define LOGFATAL_N(logger_name, message) \
-   do { \
-      ILogger* logger = CLoggerFactory::GetLogger(logger_name); \
-      if(logger != NULL) \
-         logger.Log((ENUM_LOG_LEVEL)5, message, GetLastError(), __FILE__, __LINE__, __FUNCTION__); \
-   } while(0)
-
-// Conditional logging macros (only log if condition is true)
+// Conditional logging to the default logger: LOGIF(spread > 30, LOG_WARN, "wide spread")
 #define LOGIF(condition, level, message) \
    do { \
-      if(condition) { \
-         ILogger* logger = GET_LOGGER(); \
-         if(logger != NULL) \
-            logger.Log(level, message, 0, __FILE__, __LINE__, __FUNCTION__); \
-      } \
+      if(condition) \
+         LOGGER_WRITE(CLoggerFactory::Default(), level, message, 0); \
    } while(0)
 
-// Performance timing macro
+// Performance timing: runs code_block, logs its duration at DEBUG level
 #define LOGEXECUTION_TIME(message, code_block) \
    do { \
-      uint start_time = GetTickCount(); \
+      ulong _lg_started_ = GetMicrosecondCount(); \
       code_block; \
-      uint duration = GetTickCount() - start_time; \
-      string timing_msg = StringFormat("%s [Duration: %d ms]", message, duration); \
-      LOGDEBUG(timing_msg); \
+      ulong _lg_elapsed_ = GetMicrosecondCount() - _lg_started_; \
+      LOGDEBUG(StringFormat("%s [Duration: %.3f ms]", message, _lg_elapsed_ / 1000.0)); \
    } while(0)
 
 // Entry/Exit logging macros
@@ -141,37 +87,7 @@
 
 // Trade-specific logging macros
 #define LOGTRADE_OPEN(symbol, type, volume, price) \
-   do { \
-      string trade_msg = StringFormat("Trade opened: %s %s %.2f lots at %.5f", \
-                                     symbol, EnumToString(type), volume, price); \
-      LOGINFO(trade_msg); \
-   } while(0)
+   LOGINFO(StringFormat("Trade opened: %s %s %.2f lots at %.5f", symbol, EnumToString(type), volume, price))
 
 #define LOGTRADE_CLOSE(symbol, volume, price, profit) \
-   do { \
-      string trade_msg = StringFormat("Trade closed: %s %.2f lots at %.5f, profit: %.2f", \
-                                     symbol, volume, price, profit); \
-      LOGINFO(trade_msg); \
-   } while(0)
-
-// Backward compatibility aliases
-// #define LOG_TRACE_MSG(message) LOGTRACE(message)
-// #define LOG_DEBUG_MSG(message) LOGDEBUG(message)
-// #define LOG_INFO_MSG(message)  LOGINFO(message)
-// #define LOG_WARN_MSG(message)  LOGWARN(message)
-// #define LOG_ERROR_MSG(message) LOGERROR(message)
-// #define LOG_FATAL_MSG(message) LOGFATAL(message)
-// #define LOG_ERROR_CODE(message, error_code) LOGERROR_CODE(message, error_code)
-// #define LOG_FATAL_CODE(message, error_code) LOGFATAL_CODE(message, error_code)
-// #define LOG_TRACE_N(logger_name, message) LOGTRACE_N(logger_name, message)
-// #define LOG_DEBUG_N(logger_name, message) LOGDEBUG_N(logger_name, message)
-// #define LOG_INFO_N(logger_name, message) LOGINFO_N(logger_name, message)
-// #define LOG_WARN_N(logger_name, message) LOGWARN_N(logger_name, message)
-// #define LOG_ERROR_N(logger_name, message) LOGERROR_N(logger_name, message)
-// #define LOG_FATAL_N(logger_name, message) LOGFATAL_N(logger_name, message)
-// #define LOG_IF(condition, level, message) LOGIF(condition, level, message)
-// #define LOG_EXECUTION_TIME(message, code_block) LOGEXECUTION_TIME(message, code_block)
-// #define LOG_FUNCTION_ENTRY() LOGFUNCTION_ENTRY()
-// #define LOG_FUNCTION_EXIT() LOGFUNCTION_EXIT()
-// #define LOG_TRADE_OPEN(symbol, type, volume, price) LOGTRADE_OPEN(symbol, type, volume, price)
-// #define LOG_TRADE_CLOSE(symbol, volume, price, profit) LOGTRADE_CLOSE(symbol, volume, price, profit)
+   LOGINFO(StringFormat("Trade closed: %s %.2f lots at %.5f, profit: %.2f", symbol, volume, price, profit))

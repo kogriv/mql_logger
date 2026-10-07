@@ -32,7 +32,7 @@ void TestSqlite()
       LT_EQ(LtDbLong("lgt_level.db", "SELECT COUNT(*) FROM logs"), 1);
    }
    //--- счётчик записей
-   LT_KNOWN("sqlite: GetRecordCount returns the number of rows", "F-07");
+   LT_CASE("sqlite: GetRecordCount returns the number of rows");
    {
       CSqliteHandler* h = new CSqliteHandler("lgt_count.db");
       for(int i = 0; i < 3; i++)
@@ -49,7 +49,7 @@ void TestSqlite()
       delete h;
       LT_EQ(LtDbLong("lgt_batch.db", "SELECT COUNT(*) FROM logs"), 5);
    }
-   LT_KNOWN("sqlite: batch mode commits without SQL errors", "F-08");
+   LT_CASE("sqlite: batch mode commits without SQL errors");
    {
       CSqliteHandler* h = new CSqliteHandler("lgt_batch_err.db", "logs", false, 100);
       ResetLastError();
@@ -60,7 +60,7 @@ void TestSqlite()
       LT_EQ(err, 0);
       LT_EQ(LtDbLong("lgt_batch_err.db", "SELECT COUNT(*) FROM logs"), 250);
    }
-   LT_KNOWN("sqlite: switching a live handler to batch mode works", "F-09");
+   LT_CASE("sqlite: switching a live handler to batch mode and back works");
    {
       CSqliteHandler* h = new CSqliteHandler("lgt_switch.db");
       h.SetAutoCommit(false);
@@ -68,10 +68,13 @@ void TestSqlite()
       ResetLastError();
       for(int i = 0; i < 3; i++)
          h.Handle(CreateLogRecord(LOG_INFO, "rec", "lgt"));
+      h.SetAutoCommit(true);
+      LT_EQ(h.GetRecordCount(), 3);
+      h.Handle(CreateLogRecord(LOG_INFO, "rec", "lgt"));
       int err = GetLastError();
       delete h;
       LT_EQ(err, 0);
-      LT_EQ(LtDbLong("lgt_switch.db", "SELECT COUNT(*) FROM logs"), 3);
+      LT_EQ(LtDbLong("lgt_switch.db", "SELECT COUNT(*) FROM logs"), 4);
    }
    ResetLastError();
    LtCleanup();

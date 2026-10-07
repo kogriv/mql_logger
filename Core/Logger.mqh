@@ -21,7 +21,9 @@ private:
    ENUM_LOG_LEVEL    m_level;             // Minimum level
    CArrayObj         m_handlers;          // List of handlers
    bool              m_enabled;           // Is logger enabled
-   static bool       m_global_lock;       // Global lock for thread safety
+   int               m_depth;             // Log() calls in progress (a handler may log too)
+   int               m_dropped;           // Records dropped by the recursion guard
+   static bool       s_recursion_reported; // Recursion already printed to the journal
    
    datetime          m_last_flush_time;   // Last flush time
    int               m_auto_flush_interval; // Auto flush interval (seconds)
@@ -29,8 +31,6 @@ private:
    void              CreateLogRecord(ENUM_LOG_LEVEL level, string message, 
                                    int error_code, string file, int line, string func,
                                    SLogRecord &record);
-   bool              AcquireLock();
-   void              ReleaseLock();
    void              CheckAutoFlush();
 
 public:
@@ -58,10 +58,15 @@ public:
    bool              IsLoggerEnabled() const { return m_enabled; }
    void              SetAutoFlushInterval(int seconds) { m_auto_flush_interval = seconds; }
    int               GetHandlerCount() const { return m_handlers.Total(); }
+   int               DroppedCount() const { return m_dropped; }
 };
 
 // Static member initialization
-bool CLogger::m_global_lock = false;
+bool CLogger::s_recursion_reported = false;
+
+// A handler, formatter or filter may write to a logger itself. Such nested records are
+// delivered; a chain deeper than this is cut (the record is counted in DroppedCount()).
+#define LOGGER_MAX_DEPTH 4
 
 //+------------------------------------------------------------------+
 //| Constructor                                                      |
@@ -71,6 +76,8 @@ CLogger::CLogger(string name)
    m_name = name;
    m_level = (ENUM_LOG_LEVEL)2;  // LOG_INFO = 2
    m_enabled = true;
+   m_depth = 0;
+   m_dropped = 0;
    m_last_flush_time = TimeCurrent();
    m_auto_flush_interval = 60; // 60 seconds default
    
@@ -114,24 +121,6 @@ void CLogger::CreateLogRecord(ENUM_LOG_LEVEL level, string message,
    record.function_name = func;
    record.thread_id = 0; // MQL5 doesn't have real threads
    record.error_code = error_code;
-}
-
-//+------------------------------------------------------------------+
-//| Acquire global lock (simple implementation for MQL5)           |
-//+------------------------------------------------------------------+
-bool CLogger::AcquireLock()
-{
-   if(m_global_lock) return false;
-   m_global_lock = true;
-   return true;
-}
-
-//+------------------------------------------------------------------+
-//| Release global lock                                             |
-//+------------------------------------------------------------------+
-void CLogger::ReleaseLock()
-{
-   m_global_lock = false;
 }
 
 //+------------------------------------------------------------------+
@@ -202,12 +191,23 @@ void CLogger::Log(ENUM_LOG_LEVEL level, string message, int error_code = 0,
                  string file = "", int line = 0, string func = "")
 {
    // Check if logging is enabled and level is sufficient
-   if(!m_enabled || !IsEnabled(level))
+   if(!IsEnabled(level))
       return;
    
-   // Acquire lock to prevent recursion
-   if(!AcquireLock())
+   // Recursion guard: MQL5 programs are single-threaded, the only way to get here twice
+   // is a handler that logs while handling a record
+   if(m_depth >= LOGGER_MAX_DEPTH)
+   {
+      m_dropped++;
+      if(!s_recursion_reported)
+      {
+         s_recursion_reported = true;
+         PrintFormat("Logger '%s': a handler writes to the logger it serves, nested records deeper than %d are dropped",
+                     m_name, LOGGER_MAX_DEPTH);
+      }
       return;
+   }
+   m_depth++;
    
    // Create log record
    SLogRecord record;
@@ -227,8 +227,7 @@ void CLogger::Log(ENUM_LOG_LEVEL level, string message, int error_code = 0,
    // Check for auto-flush
    CheckAutoFlush();
    
-   // Release lock
-   ReleaseLock();
+   m_depth--;
 }
 
 //+------------------------------------------------------------------+

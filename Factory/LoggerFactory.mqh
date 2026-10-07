@@ -45,6 +45,8 @@ struct SLoggerConfig
    bool              detailed_format;     // Use detailed formatter
    bool              auto_flush;          // Auto flush handlers
    int               flush_interval;      // Flush interval in seconds
+   bool              db_auto_commit;      // Database: commit every record
+   int               db_batch_size;       // Database: records per commit in batch mode
    
    // Constructor with defaults
    SLoggerConfig() : name("default"),
@@ -58,7 +60,9 @@ struct SLoggerConfig
                     format_pattern(""),
                     detailed_format(false),
                     auto_flush(false),
-                    flush_interval(60) {}
+                    flush_interval(60),
+                    db_auto_commit(true),
+                    db_batch_size(100) {}
 };
 
 //+------------------------------------------------------------------+
@@ -77,6 +81,7 @@ private:
    static void       Initialize();
    static void       Cleanup();
    static CLogger*   FindLogger(string name);
+   static CLogger*   s_default;           // Logger "default", kept for the macros
    static void       RegisterLogger(CLogger* logger);
    static void       RegisterHandler(ILogHandler* handler);
    static void       RegisterFormatter(ILogFormatter* formatter);
@@ -85,6 +90,7 @@ private:
 public:
    // Factory methods
    static CLogger*   GetLogger(string name = "default");
+   static CLogger*   Default();           // Logger "default" without a lookup by name
    static CLogger*   CreateLogger(string name, const SLoggerConfig &config);
    static CLogger*   CreateLogger(string name);
    
@@ -92,7 +98,8 @@ public:
    static CConsoleHandler*   CreateConsoleHandler(bool use_print = true, bool show_alerts = false);
    static CFileHandler*      CreateFileHandler(string filename, bool append = true, bool auto_flush = false,
                                                bool common = false, bool unicode = false);
-   static CSqliteHandler*    CreateSqliteHandler(string database_path, string table_name = "logs");
+   static CSqliteHandler*    CreateSqliteHandler(string database_path, string table_name = "logs",
+                                                 bool auto_commit = true, int batch_size = 100);
    
    // Formatter creation methods
    static CSimpleFormatter*  CreateSimpleFormatter(string pattern = "");
@@ -140,6 +147,7 @@ CArrayObj CLoggerFactory::s_handlers;
 CArrayObj CLoggerFactory::s_formatters;
 CArrayObj CLoggerFactory::s_filters;
 bool CLoggerFactory::s_initialized = false;
+CLogger* CLoggerFactory::s_default = NULL;
 SLoggerConfig CLoggerFactory::s_default_config;
 
 //+------------------------------------------------------------------+
@@ -165,6 +173,7 @@ void CLoggerFactory::Cleanup()
 {
    if(s_initialized)
    {
+      s_default = NULL;
       s_loggers.Clear();
       s_handlers.Clear();
       s_formatters.Clear();
@@ -259,6 +268,16 @@ CLogger* CLoggerFactory::GetLogger(string name = "default")
 }
 
 //+------------------------------------------------------------------+
+//| Logger "default": found once, then returned without a lookup   |
+//+------------------------------------------------------------------+
+CLogger* CLoggerFactory::Default()
+{
+   if(s_default == NULL)
+      s_default = GetLogger("default");
+   return s_default;
+}
+
+//+------------------------------------------------------------------+
 //| Create logger with configuration                               |
 //+------------------------------------------------------------------+
 CLogger* CLoggerFactory::CreateLogger(string name, const SLoggerConfig &config)
@@ -344,7 +363,8 @@ CFileHandler* CLoggerFactory::CreateFileHandler(string filename, bool append = t
 //+------------------------------------------------------------------+
 //| Create SQLite handler                                          |
 //+------------------------------------------------------------------+
-CSqliteHandler* CLoggerFactory::CreateSqliteHandler(string database_path, string table_name = "logs")
+CSqliteHandler* CLoggerFactory::CreateSqliteHandler(string database_path, string table_name = "logs",
+                                                    bool auto_commit = true, int batch_size = 100)
 {
    Initialize();
    
@@ -353,7 +373,7 @@ CSqliteHandler* CLoggerFactory::CreateSqliteHandler(string database_path, string
       database_path = GenerateDbFileName();
    }
    
-   CSqliteHandler* handler = new CSqliteHandler(database_path, table_name);
+   CSqliteHandler* handler = new CSqliteHandler(database_path, table_name, auto_commit, batch_size);
    if(handler != NULL)
    {
       RegisterHandler(handler);
@@ -510,7 +530,7 @@ void CLoggerFactory::ConfigureLogger(CLogger* logger, const SLoggerConfig &confi
          db_filename = GenerateDbFileName(config.name);
       }
       
-      CSqliteHandler* db_handler = CreateSqliteHandler(db_filename);
+      CSqliteHandler* db_handler = CreateSqliteHandler(db_filename, "logs", config.db_auto_commit, config.db_batch_size);
       if(db_handler != NULL)
       {
          logger.AddHandler(db_handler);
@@ -605,28 +625,10 @@ CLogger* CLoggerFactory::CreateCompositeLogger(string name, bool console, string
    config.database_file = db_file;
    config.detailed_format = true;
    
-   CLogger* logger = CreateLogger(name, config);
+   config.db_auto_commit = db_auto_commit;
+   config.db_batch_size = db_batch_size;
    
-   // Настраиваем SQLite handler с переданными параметрами
-   if(config.database_output && logger != NULL)
-   {
-      for(int i = s_handlers.Total() - 1; i >= 0; i--)
-      {
-         CObject* obj = s_handlers.At(i);
-         CSqliteHandler* sqlite_handler = dynamic_cast<CSqliteHandler*>(obj);
-         if(sqlite_handler != NULL && 
-            StringFind(sqlite_handler.GetDatabasePath(), db_file) >= 0)
-         {
-            sqlite_handler.SetAutoCommit(db_auto_commit);
-            sqlite_handler.SetBatchSize(db_batch_size);
-            PrintFormat("SQLite handler configured: auto_commit=%s, batch_size=%d", 
-                       db_auto_commit ? "true" : "false", db_batch_size);
-            break;
-         }
-      }
-   }
-   
-   return logger;
+   return CreateLogger(name, config);
 }
 
 //+------------------------------------------------------------------+
@@ -652,7 +654,7 @@ CLogger* CLoggerFactory::CreateProfileLogger(string name, ENUM_LOGGER_PROFILE pr
    // Create base logger configuration
    SLoggerConfig cfg;
    cfg.console_output = false;      // Don't add default handler
-   cfg.level = LOG_TRACE;           // Allow all messages through
+   cfg.level = LOG_TRACE;           // Set per profile below: the lowest level of its handlers
    
    CLogger* logger = CLoggerFactory::CreateLogger(name, cfg);
    if(logger == NULL)
@@ -678,12 +680,11 @@ CLogger* CLoggerFactory::CreateProfileLogger(string name, ENUM_LOGGER_PROFILE pr
             if(db_handler != NULL)
             {
                db_handler.SetLevel(LOG_TRACE);
-               db_handler.SetAutoCommit(true);
-               db_handler.SetBatchSize(1);
                logger.AddHandler(db_handler);
             }
             
-            logger.Log(LOG_WARN, StringFormat("Logger '%s' initialized with DEBUG profile (Console:WARN + DB:TRACE)", name), 0, "", 0, "");
+            logger.SetLevel(LOG_TRACE);
+            logger.Log(LOG_INFO, StringFormat("Logger '%s' initialized with DEBUG profile (Console:WARN + DB:TRACE)", name), 0, "", 0, "");
             break;
          }
          
@@ -697,7 +698,9 @@ CLogger* CLoggerFactory::CreateProfileLogger(string name, ENUM_LOGGER_PROFILE pr
                logger.AddHandler(console_handler);
             }
             
-            logger.Log(LOG_WARN, StringFormat("Logger '%s' initialized with PERFORMANCE profile (Console:WARN only)", name), 0, "", 0, "");
+            // The logger itself rejects everything below WARN: a disabled call costs one comparison
+            logger.SetLevel(LOG_WARN);
+            logger.Log(LOG_INFO, StringFormat("Logger '%s' initialized with PERFORMANCE profile (Console:WARN only)", name), 0, "", 0, "");
             break;
          }
          
@@ -715,12 +718,11 @@ CLogger* CLoggerFactory::CreateProfileLogger(string name, ENUM_LOGGER_PROFILE pr
             if(db_handler != NULL)
             {
                db_handler.SetLevel(LOG_INFO);
-               db_handler.SetAutoCommit(true);
-               db_handler.SetBatchSize(10);  // Higher batch size for production
                logger.AddHandler(db_handler);
             }
             
-            logger.Log(LOG_WARN, StringFormat("Logger '%s' initialized with PRODUCTION profile (Console:WARN + DB:INFO)", name), 0, "", 0, "");
+            logger.SetLevel(LOG_INFO);
+            logger.Log(LOG_INFO, StringFormat("Logger '%s' initialized with PRODUCTION profile (Console:WARN + DB:INFO)", name), 0, "", 0, "");
             break;
          }
          
@@ -814,6 +816,8 @@ void CLoggerFactory::RemoveLogger(string name)
       CLogger* logger = dynamic_cast<CLogger*>(obj);
       if(logger != NULL && StringCompare(logger.Name(), name) == 0)
       {
+         if(logger == s_default)
+            s_default = NULL;
          s_loggers.Delete(i);
          break;
       }
@@ -825,16 +829,15 @@ void CLoggerFactory::RemoveLogger(string name)
 //+------------------------------------------------------------------+
 void CLoggerFactory::RemoveAllLoggers()
 {
+   s_default = NULL;
    s_loggers.Clear();
 }
 
 //+------------------------------------------------------------------+
-//| Shutdown factory and cleanup all resources - улучшенная версия |
+//| Shutdown factory and cleanup all resources                     |
 //+------------------------------------------------------------------+
 void CLoggerFactory::Shutdown()
 {
-   PrintFormat("Logger factory shutdown started...");
-   
    // Принудительно сбрасываем все логгеры
    FlushAll();
    
@@ -845,13 +848,11 @@ void CLoggerFactory::Shutdown()
       CSqliteHandler* sqlite_handler = dynamic_cast<CSqliteHandler*>(obj);
       if(sqlite_handler != NULL)
       {
-         PrintFormat("Force closing SQLite handler: %s", sqlite_handler.GetDatabasePath());
          sqlite_handler.Flush();
          sqlite_handler.Close();
       }
    }
    
-   PrintFormat("Logger factory shutdown completed");
    Cleanup();
 }
 

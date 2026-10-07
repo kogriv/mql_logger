@@ -27,6 +27,7 @@ private:
    bool              m_auto_commit;       // Auto commit transactions
    int               m_batch_size;        // Batch size for commits
    int               m_pending_records;   // Records pending commit
+   bool              m_in_transaction;    // Explicit transaction is open
    bool              m_create_indexes;    // Create performance indexes
    
    bool              OpenDatabase();
@@ -35,6 +36,8 @@ private:
    bool              CreateIndexes();
    bool              InsertRecord(const SLogRecord &record);
    void              CommitBatch();
+   bool              BeginTransaction();
+   bool              CommitTransaction();
    string            EscapeSqlString(string text);  // Изменено: input -> text
 
 public:
@@ -52,7 +55,7 @@ public:
    virtual bool      IsEnabled(ENUM_LOG_LEVEL level) override;
    
    // SQLite-specific methods
-   void              SetAutoCommit(bool auto_commit) { m_auto_commit = auto_commit; }
+   void              SetAutoCommit(bool auto_commit);
    bool              GetAutoCommit() const { return m_auto_commit; }
    void              SetBatchSize(int batch_size) { m_batch_size = batch_size; }
    int               GetBatchSize() const { return m_batch_size; }
@@ -83,6 +86,7 @@ CSqliteHandler::CSqliteHandler(string database_path, string table_name = "logs",
    m_auto_commit(auto_commit),
    m_batch_size(batch_size),
    m_pending_records(0),
+   m_in_transaction(false),
    m_create_indexes(true)
 {
    OpenDatabase();
@@ -126,40 +130,74 @@ bool CSqliteHandler::OpenDatabase()
    
    // Begin transaction if not auto-committing
    if(!m_auto_commit)
-   {
-      ExecuteQuery("BEGIN TRANSACTION");
-   }
+      BeginTransaction();
    
    return true;
 }
 
 //+------------------------------------------------------------------+
-//| Close SQLite database - улучшенная версия                        |
+//| Close SQLite database                                           |
 //+------------------------------------------------------------------+
 void CSqliteHandler::CloseDatabase()
 {
    if(m_database_handle != INVALID_HANDLE)
    {
-      // Принудительно коммитим все pending записи
-      if(m_pending_records > 0)
-      {
-         PrintFormat("Committing %d pending records before closing database", m_pending_records);
-         
-         if(!m_auto_commit)
-         {
-            ExecuteQuery("COMMIT");
-         }
-         m_pending_records = 0;
-      }
-      
-      // Принудительная синхронизация
-      ExecuteQuery("PRAGMA synchronous = FULL");
+      CommitTransaction();
+      m_pending_records = 0;
       
       DatabaseClose(m_database_handle);
       m_database_handle = INVALID_HANDLE;
-      
-      PrintFormat("Database closed: %s", m_database_path);
    }
+}
+
+//+------------------------------------------------------------------+
+//| Open an explicit transaction (batch mode)                       |
+//+------------------------------------------------------------------+
+bool CSqliteHandler::BeginTransaction()
+{
+   if(m_database_handle == INVALID_HANDLE || m_in_transaction)
+      return m_in_transaction;
+   
+   m_in_transaction = ExecuteQuery("BEGIN TRANSACTION");
+   return m_in_transaction;
+}
+
+//+------------------------------------------------------------------+
+//| Commit the open transaction, if any                             |
+//+------------------------------------------------------------------+
+bool CSqliteHandler::CommitTransaction()
+{
+   if(m_database_handle == INVALID_HANDLE || !m_in_transaction)
+      return true;
+   
+   m_in_transaction = false;
+   if(!ExecuteQuery("COMMIT"))
+   {
+      PrintFormat("Failed to commit %d log records to %s", m_pending_records, m_database_path);
+      return false;
+   }
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| Switch between commit-per-record and batch mode                 |
+//+------------------------------------------------------------------+
+void CSqliteHandler::SetAutoCommit(bool auto_commit)
+{
+   if(m_auto_commit == auto_commit)
+      return;
+   
+   m_auto_commit = auto_commit;
+   if(m_database_handle == INVALID_HANDLE)
+      return;
+   
+   if(m_auto_commit)
+   {
+      CommitTransaction();
+      m_pending_records = 0;
+   }
+   else
+      BeginTransaction();
 }
 
 //+------------------------------------------------------------------+
@@ -252,42 +290,29 @@ bool CSqliteHandler::InsertRecord(const SLogRecord &record)
    
    m_pending_records++;
    
-   // Auto-commit or batch commit
+   // Batch mode: commit every m_batch_size records
    if(m_auto_commit)
-   {
-      CommitBatch();
-   }
+      m_pending_records = 0;
    else if(m_pending_records >= m_batch_size)
-   {
       CommitBatch();
-   }
    
    return true;
 }
 
 //+------------------------------------------------------------------+
-//| Commit pending records - улучшенная версия                     |
+//| Commit pending records                                         |
 //+------------------------------------------------------------------+
 void CSqliteHandler::CommitBatch()
 {
    if(m_database_handle == INVALID_HANDLE)
       return;
-      
-   if(m_pending_records > 0)
-   {
-      if(!m_auto_commit)
-      {
-         if(!ExecuteQuery("COMMIT"))
-         {
-            PrintFormat("Failed to commit batch of %d records", m_pending_records);
-         }
-         ExecuteQuery("BEGIN TRANSACTION");
-      }
-      m_pending_records = 0;
-   }
    
-   // Принудительная синхронизация с диском
-   ExecuteQuery("PRAGMA synchronous = FULL");
+   if(!m_auto_commit)
+   {
+      CommitTransaction();
+      BeginTransaction();
+   }
+   m_pending_records = 0;
 }
 
 //+------------------------------------------------------------------+
@@ -383,7 +408,8 @@ int CSqliteHandler::GetRecordCount()
    int count = -1;
    if(DatabaseRead(request))
    {
-      count = DatabaseColumnInteger(request, 0, count);
+      if(!DatabaseColumnInteger(request, 0, count))
+         count = -1;
    }
    
    DatabaseFinalize(request);
