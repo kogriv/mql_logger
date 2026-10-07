@@ -6,7 +6,6 @@
 #property copyright "Copyright 2025, kogriv"
 #property link      "https://www.mql5.com/ru/users/kogriv"
 #property version   "1.00"
-#property strict
 
 #include "..\Core\Logger.mqh"
 #include "..\Handlers\ConsoleHandler.mqh"
@@ -15,6 +14,7 @@
 #include "..\Formatters\SimpleFormatter.mqh"
 #include "..\Formatters\DetailedFormatter.mqh"
 #include "..\Filters\LevelFilter.mqh"
+#include "..\Filters\SubstringFilter.mqh"
 #include "..\Filters\RegexFilter.mqh"
 #include <Arrays\ArrayObj.mqh>
 
@@ -86,6 +86,9 @@ private:
    static void       RegisterHandler(ILogHandler* handler);
    static void       RegisterFormatter(ILogFormatter* formatter);
    static void       RegisterFilter(ILogFilter* filter);
+   static bool       s_bad_name_reported; // Invalid name already printed to the journal
+   static bool       CheckName(string name);
+   static void       ReleaseHandlers(ILogHandler* &handlers[]);
 
 public:
    // Factory methods
@@ -107,7 +110,8 @@ public:
    
    // Filter creation methods
    static CLevelFilter*      CreateLevelFilter(ENUM_LOG_LEVEL min_level = LOG_TRACE);
-   static CRegexFilter*      CreateRegexFilter(bool case_sensitive = true);
+   static CSubstringFilter*  CreateSubstringFilter(bool case_sensitive = true);
+   static CRegexFilter*      CreateRegexFilter(bool case_sensitive = true);   // устарело: CreateSubstringFilter
    
    // Configuration methods
    static void       SetDefaultConfig(const SLoggerConfig &config);
@@ -131,6 +135,7 @@ public:
    static void       EnableAll(bool enabled);
    static int        GetLoggerCount();
    static CLogger*   GetLoggerByIndex(int index);
+   static bool       Exists(string name);
    static void       RemoveLogger(string name);
    static void       RemoveAllLoggers();
    static void       Shutdown();
@@ -148,6 +153,7 @@ CArrayObj CLoggerFactory::s_formatters;
 CArrayObj CLoggerFactory::s_filters;
 bool CLoggerFactory::s_initialized = false;
 CLogger* CLoggerFactory::s_default = NULL;
+bool CLoggerFactory::s_bad_name_reported = false;
 SLoggerConfig CLoggerFactory::s_default_config;
 
 //+------------------------------------------------------------------+
@@ -251,10 +257,8 @@ CLogger* CLoggerFactory::GetLogger(string name = "default")
 {
    Initialize();
    
-   if(!IsValidLoggerName(name))
-   {
-      name = "default";
-   }
+   if(!CheckName(name))
+      return NULL;
    
    // Try to find existing logger
    CLogger* logger = FindLogger(name);
@@ -265,6 +269,29 @@ CLogger* CLoggerFactory::GetLogger(string name = "default")
    
    // Create new logger with default configuration
    return CreateLogger(name, s_default_config);
+}
+
+//+------------------------------------------------------------------+
+//| Name check with one line in the journal per program             |
+//+------------------------------------------------------------------+
+bool CLoggerFactory::CheckName(string name)
+{
+   if(IsValidLoggerName(name))
+      return true;
+   if(!s_bad_name_reported)
+   {
+      s_bad_name_reported = true;
+      PrintFormat("Logger: invalid logger name '%s' (1-50 characters: letters, digits, '_', '-', '.'); no logger is returned", name);
+   }
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Is there a logger with this name                                |
+//+------------------------------------------------------------------+
+bool CLoggerFactory::Exists(string name)
+{
+   return FindLogger(name) != NULL;
 }
 
 //+------------------------------------------------------------------+
@@ -284,18 +311,14 @@ CLogger* CLoggerFactory::CreateLogger(string name, const SLoggerConfig &config)
 {
    Initialize();
    
-   if(!IsValidLoggerName(name))
-   {
-      PrintFormat("Invalid logger name: %s", name);
+   if(!CheckName(name))
       return NULL;
-   }
    
-   // Check if logger already exists
-   if(FindLogger(name) != NULL)
-   {
-      PrintFormat("Logger already exists: %s", name);
-      return FindLogger(name);
-   }
+   // Логгер с таким именем уже есть (например, повторный OnInit): он и возвращается, конфигурация не
+   // применяется. Нужна другая — сначала RemoveLogger(name).
+   CLogger* existing = FindLogger(name);
+   if(existing != NULL)
+      return existing;
    
    // Create new logger
    CLogger* logger = new CLogger(name);
@@ -431,7 +454,23 @@ CLevelFilter* CLoggerFactory::CreateLevelFilter(ENUM_LOG_LEVEL min_level = LOG_T
 }
 
 //+------------------------------------------------------------------+
-//| Create regex filter                                            |
+//| Create substring filter                                        |
+//+------------------------------------------------------------------+
+CSubstringFilter* CLoggerFactory::CreateSubstringFilter(bool case_sensitive = true)
+{
+   Initialize();
+   
+   CSubstringFilter* filter = new CSubstringFilter(case_sensitive);
+   if(filter != NULL)
+   {
+      RegisterFilter(filter);
+   }
+   
+   return filter;
+}
+
+//+------------------------------------------------------------------+
+//| Устарело: то же под прежним именем                              |
 //+------------------------------------------------------------------+
 CRegexFilter* CLoggerFactory::CreateRegexFilter(bool case_sensitive = true)
 {
@@ -590,24 +629,10 @@ CLogger* CLoggerFactory::CreateDatabaseLogger(string name, string database_path,
 //| Create composite logger (multiple outputs)                     |
 //+------------------------------------------------------------------+
 CLogger* CLoggerFactory::CreateCompositeLogger(string name, bool console = true, string log_file = "", string db_file = "")
-// Оставляем старую версию для совместимости
 {
-   // Для тестера используем безопасные настройки по умолчанию
-   return CreateCompositeLogger(name, console, log_file, db_file, true, 1);
+   // База — в режиме «по записи»: переживает критическую ошибку программы
+   return CreateCompositeLogger(name, console, log_file, db_file, true, 100);
 }
-// {
-//    SLoggerConfig config;
-//    config.name = name;
-//    config.level = LOG_INFO;
-//    config.console_output = console;
-//    config.file_output = (StringLen(log_file) > 0);
-//    config.database_output = (StringLen(db_file) > 0);
-//    config.log_file = log_file;
-//    config.database_file = db_file;
-//    config.detailed_format = true;
-   
-//    return CreateLogger(name, config);
-// }
 
 //+------------------------------------------------------------------+
 //| Create composite logger with SQLite settings                   |
@@ -638,18 +663,13 @@ CLogger* CLoggerFactory::CreateProfileLogger(string name, ENUM_LOGGER_PROFILE pr
 {
    Initialize();
    
-   if(!IsValidLoggerName(name))
-   {
-      PrintFormat("Invalid logger name: %s", name);
+   if(!CheckName(name))
       return NULL;
-   }
    
-   // Check if logger already exists
-   if(FindLogger(name) != NULL)
-   {
-      PrintFormat("Logger already exists: %s", name);
-      return FindLogger(name);
-   }
+   // Уже есть — возвращается как есть (см. CreateLogger)
+   CLogger* existing = FindLogger(name);
+   if(existing != NULL)
+      return existing;
    
    // Create base logger configuration
    SLoggerConfig cfg;
@@ -729,7 +749,7 @@ CLogger* CLoggerFactory::CreateProfileLogger(string name, ENUM_LOGGER_PROFILE pr
       default:
          {
             PrintFormat("Unknown logger profile: %d", profile);
-            delete logger;
+            RemoveLogger(name);
             return NULL;
          }
    }
@@ -816,10 +836,49 @@ void CLoggerFactory::RemoveLogger(string name)
       CLogger* logger = dynamic_cast<CLogger*>(obj);
       if(logger != NULL && StringCompare(logger.Name(), name) == 0)
       {
+         ILogHandler* handlers[];
+         int count = logger.GetHandlerCount();
+         ArrayResize(handlers, count);
+         for(int h = 0; h < count; h++)
+            handlers[h] = logger.GetHandler(h);
+         
          if(logger == s_default)
             s_default = NULL;
          s_loggers.Delete(i);
+         ReleaseHandlers(handlers);
          break;
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Закрыть и удалить обработчики фабрики, которыми больше не       |
+//| пользуется ни один логгер. Обработчики, созданные мимо фабрики, |
+//| не трогаются. Форматтеры и фильтры живут до Shutdown().         |
+//+------------------------------------------------------------------+
+void CLoggerFactory::ReleaseHandlers(ILogHandler* &handlers[])
+{
+   for(int h = 0; h < ArraySize(handlers); h++)
+   {
+      if(handlers[h] == NULL)
+         continue;
+      
+      bool in_use = false;
+      for(int i = 0; i < s_loggers.Total() && !in_use; i++)
+      {
+         CLogger* other = dynamic_cast<CLogger*>(s_loggers.At(i));
+         in_use = (other != NULL && other.HasHandler(handlers[h]));
+      }
+      if(in_use)
+         continue;
+      
+      for(int i = 0; i < s_handlers.Total(); i++)
+      {
+         if(s_handlers.At(i) == handlers[h])
+         {
+            s_handlers.Delete(i);   // деструктор обработчика закрывает файл или базу
+            break;
+         }
       }
    }
 }
@@ -829,8 +888,17 @@ void CLoggerFactory::RemoveLogger(string name)
 //+------------------------------------------------------------------+
 void CLoggerFactory::RemoveAllLoggers()
 {
+   while(s_loggers.Total() > 0)
+   {
+      CLogger* logger = dynamic_cast<CLogger*>(s_loggers.At(s_loggers.Total() - 1));
+      if(logger == NULL)
+      {
+         s_loggers.Delete(s_loggers.Total() - 1);
+         continue;
+      }
+      RemoveLogger(logger.Name());
+   }
    s_default = NULL;
-   s_loggers.Clear();
 }
 
 //+------------------------------------------------------------------+
@@ -900,7 +968,7 @@ bool CLoggerFactory::IsValidLoggerName(string name)
       if(!((ch >= 'a' && ch <= 'z') || 
            (ch >= 'A' && ch <= 'Z') || 
            (ch >= '0' && ch <= '9') || 
-           ch == '_' || ch == '-'))
+           ch == '_' || ch == '-' || ch == '.'))
       {
          return false;
       }

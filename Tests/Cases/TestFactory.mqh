@@ -52,7 +52,7 @@ void TestFactory()
       LT_CHECK(!a.IsEnabled(LOG_FATAL) && !b.IsEnabled(LOG_FATAL));
       CLoggerFactory::Shutdown();
    }
-   LT_KNOWN("factory: dot is allowed in a logger name", "F-25");
+   LT_CASE("factory: dot is allowed in a logger name");
    {
       CLogger* lg = LtBareLogger("lgt.module");
       LT_CHECK(lg != NULL);
@@ -60,14 +60,67 @@ void TestFactory()
          LT_EQ(lg.Name(), "lgt.module");
       CLoggerFactory::Shutdown();
    }
-   LT_KNOWN("factory: invalid name gives NULL, not the default logger", "F-25");
+   LT_CASE("factory: invalid name gives NULL, not the default logger");
    {
       SLoggerConfig quiet;
       quiet.console_output = false;
       CLoggerFactory::SetDefaultConfig(quiet);
       LT_CHECK(CLoggerFactory::GetLogger("bad name!") == NULL);
+      LT_CHECK(CLoggerFactory::GetLogger("") == NULL);
+      LT_CHECK(LtBareLogger("bad/name") == NULL);
+      LT_CHECK(CLoggerFactory::CreateProfileLogger("bad name", LOGGER_PROFILE_PERFORMANCE) == NULL);
+      LT_EQ(CLoggerFactory::GetLoggerCount(), 0);
+      //--- макросы с несуществующим логгером ничего не делают
+      LOGINFO_N("bad name!", "nowhere");
       SLoggerConfig def;
       CLoggerFactory::SetDefaultConfig(def);
+      CLoggerFactory::Shutdown();
+   }
+   LT_CASE("factory: creating a logger again returns the existing one");
+   {
+      CCaptureHandler cap;
+      CLogger* first = LtBareLogger("lgt_again", LOG_WARN);
+      first.AddHandler(GetPointer(cap));
+      LT_CHECK(CLoggerFactory::Exists("lgt_again"));
+      LT_CHECK(!CLoggerFactory::Exists("lgt_never"));
+      SLoggerConfig other;
+      other.level = LOG_TRACE;
+      other.file_output = true;
+      other.log_file = "lgt_again.log";
+      LT_CHECK(CLoggerFactory::CreateLogger("lgt_again", other) == first);
+      LT_CHECK(CLoggerFactory::CreateProfileLogger("lgt_again", LOGGER_PROFILE_DEBUG) == first);
+      LT_EQ(first.GetHandlerCount(), 1);
+      LT_CHECK(!first.IsEnabled(LOG_INFO));
+      LT_CHECK(!FileIsExist("lgt_again.log"));
+      LT_CHECK(!FileIsExist("lgt_again.db"));
+      //--- другая конфигурация — после удаления
+      CLoggerFactory::RemoveLogger("lgt_again");
+      CLogger* second = CLoggerFactory::CreateLogger("lgt_again", other);
+      LT_CHECK(second != NULL && second.IsEnabled(LOG_TRACE));
+      CLoggerFactory::Shutdown();
+   }
+   LT_CASE("factory: removing a logger closes its handlers, shared ones stay");
+   {
+      CLogger* db = CLoggerFactory::CreateDatabaseLogger("lgt_rm", "lgt_rm.db", LOG_INFO);
+      db.Info("one");
+      LT_CHECK(!FileDelete("lgt_rm.db"));          // база открыта обработчиком
+      ResetLastError();
+      CLoggerFactory::RemoveLogger("lgt_rm");
+      LT_CHECK(FileDelete("lgt_rm.db"));           // закрыта вместе с логгером
+      //--- общий обработчик
+      CFileHandler* shared = CLoggerFactory::CreateFileHandler("lgt_shared2.log", false, true);
+      CLogger* a = LtBareLogger("lgt_sa");
+      CLogger* b = LtBareLogger("lgt_sb");
+      a.AddHandler(shared);
+      b.AddHandler(shared);
+      a.Info("from a");
+      CLoggerFactory::RemoveLogger("lgt_sa");
+      b.Info("from b");
+      string lines[];
+      LT_EQ(LtReadLines("lgt_shared2.log", lines), 2);
+      CLoggerFactory::RemoveAllLoggers();
+      LT_EQ(CLoggerFactory::GetLoggerCount(), 0);
+      LT_CHECK(FileDelete("lgt_shared2.log"));
       CLoggerFactory::Shutdown();
    }
    LT_CASE("factory: profiles build the expected handlers");

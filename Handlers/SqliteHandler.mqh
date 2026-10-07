@@ -6,7 +6,6 @@
 #property copyright "Copyright 2025, kogriv"
 #property link      "https://www.mql5.com/ru/users/kogriv"
 #property version   "1.00"
-#property strict
 
 #include "..\Core\Interfaces.mqh"
 
@@ -98,7 +97,7 @@ CSqliteHandler::CSqliteHandler(string database_path, string table_name = "logs",
                               bool auto_commit = true, int batch_size = 100) :
    m_formatter(NULL),
    m_filter(NULL),
-   m_level((ENUM_LOG_LEVEL)0), // LOG_TRACE
+   m_level(LOG_TRACE),
    m_enabled(true),
    m_database_path(database_path),
    m_database_handle(INVALID_HANDLE),

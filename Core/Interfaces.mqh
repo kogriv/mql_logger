@@ -6,7 +6,6 @@
 #property copyright "Copyright 2025, kogriv"
 #property link      "https://www.mql5.com/ru/users/kogriv"
 #property version   "1.00"
-#property strict
 
 #include "LogRecord.mqh"
 #include <Arrays\ArrayObj.mqh>

@@ -116,7 +116,7 @@ void TestFormatters()
    }
    LT_CASE("filter: text include and exclude");
    {
-      CRegexFilter f(false);
+      CSubstringFilter f(false);
       LT_CHECK(f.ShouldLog(rec));
       f.AddIncludePattern("HELL");
       LT_CHECK(f.ShouldLog(rec));
@@ -124,8 +124,15 @@ void TestFormatters()
       f.AddIncludePattern("boom");
       f.AddExcludePattern("oo");
       LT_CHECK(!f.ShouldLog(err));
-      CRegexFilter cs(true);
+      CSubstringFilter cs(true);
       cs.AddIncludePattern("HELL");
       LT_CHECK(!cs.ShouldLog(rec));
+      // прежнее имя класса и метода фабрики по-прежнему работают
+      CRegexFilter* old = CLoggerFactory::CreateRegexFilter(false);
+      old.AddExcludePattern("BOOM");
+      LT_CHECK(!old.ShouldLog(err));
+      CSubstringFilter* fresh = CLoggerFactory::CreateSubstringFilter();
+      LT_CHECK(fresh != NULL && fresh.ShouldLog(err));
+      CLoggerFactory::Shutdown();
    }
 }

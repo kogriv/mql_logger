@@ -64,7 +64,8 @@ void TestCore()
       LT_EQ(b.m_count, 2);
       LT_EQ(lg.GetHandlerCount(), 1);
       CLoggerFactory::Shutdown();
-      LT_CHECK(b.m_closed);
+      // обработчик создан не фабрикой: логгер и фабрика его не закрывают
+      LT_CHECK(!b.m_closed);
    }
    //--- запись из обработчика в другой логгер
    LT_CASE("core: record written from a handler reaches another logger");

@@ -6,7 +6,6 @@
 #property copyright "Copyright 2025, kogriv"
 #property link      "https://www.mql5.com/ru/users/kogriv"
 #property version   "1.00"
-#property strict
 
 #include "Interfaces.mqh"
 #include <Arrays\ArrayObj.mqh>
@@ -58,6 +57,8 @@ public:
    bool              IsLoggerEnabled() const { return m_enabled; }
    void              SetAutoFlushInterval(int seconds) { m_auto_flush_interval = seconds; }
    int               GetHandlerCount() const { return m_handlers.Total(); }
+   ILogHandler*      GetHandler(int index);
+   bool              HasHandler(ILogHandler* handler);
    int               DroppedCount() const { return m_dropped; }
 };
 
@@ -74,7 +75,7 @@ bool CLogger::s_recursion_reported = false;
 CLogger::CLogger(string name)
 {
    m_name = name;
-   m_level = (ENUM_LOG_LEVEL)2;  // LOG_INFO = 2
+   m_level = LOG_INFO;
    m_enabled = true;
    m_depth = 0;
    m_dropped = 0;
@@ -89,20 +90,32 @@ CLogger::CLogger(string name)
 //+------------------------------------------------------------------+
 CLogger::~CLogger()
 {
+   // Обработчики логгеру не принадлежат: закрывает их владелец (фабрика или тот, кто создал)
    Flush();
-   
-   // Close all handlers
+   m_handlers.Clear();
+}
+
+//+------------------------------------------------------------------+
+//| Handler by index, NULL if out of range                          |
+//+------------------------------------------------------------------+
+ILogHandler* CLogger::GetHandler(int index)
+{
+   if(index < 0 || index >= m_handlers.Total())
+      return NULL;
+   return dynamic_cast<ILogHandler*>(m_handlers.At(index));
+}
+
+//+------------------------------------------------------------------+
+//| Is the handler attached to this logger                          |
+//+------------------------------------------------------------------+
+bool CLogger::HasHandler(ILogHandler* handler)
+{
    for(int i = 0; i < m_handlers.Total(); i++)
    {
-      CObject* obj = m_handlers.At(i);
-      ILogHandler* handler = dynamic_cast<ILogHandler*>(obj);
-      if(handler != NULL)
-      {
-         handler.Close();
-      }
+      if(m_handlers.At(i) == handler)
+         return true;
    }
-   
-   m_handlers.Clear();
+   return false;
 }
 
 //+------------------------------------------------------------------+
@@ -140,7 +153,7 @@ void CLogger::CheckAutoFlush()
 //+------------------------------------------------------------------+
 void CLogger::Trace(string message)
 {
-   Log((ENUM_LOG_LEVEL)0, message);  // LOG_TRACE = 0
+   Log(LOG_TRACE, message);
 }
 
 //+------------------------------------------------------------------+
@@ -148,7 +161,7 @@ void CLogger::Trace(string message)
 //+------------------------------------------------------------------+
 void CLogger::Debug(string message)
 {
-   Log((ENUM_LOG_LEVEL)1, message);  // LOG_DEBUG = 1
+   Log(LOG_DEBUG, message);
 }
 
 //+------------------------------------------------------------------+
@@ -156,7 +169,7 @@ void CLogger::Debug(string message)
 //+------------------------------------------------------------------+
 void CLogger::Info(string message)
 {
-   Log((ENUM_LOG_LEVEL)2, message);  // LOG_INFO = 2
+   Log(LOG_INFO, message);
 }
 
 //+------------------------------------------------------------------+
@@ -164,7 +177,7 @@ void CLogger::Info(string message)
 //+------------------------------------------------------------------+
 void CLogger::Warn(string message)
 {
-   Log((ENUM_LOG_LEVEL)3, message);  // LOG_WARN = 3
+   Log(LOG_WARN, message);
 }
 
 //+------------------------------------------------------------------+
@@ -172,7 +185,7 @@ void CLogger::Warn(string message)
 //+------------------------------------------------------------------+
 void CLogger::Error(string message, int error_code = 0)
 {
-   Log((ENUM_LOG_LEVEL)4, message, error_code);  // LOG_ERROR = 4
+   Log(LOG_ERROR, message, error_code);
 }
 
 //+------------------------------------------------------------------+
@@ -180,7 +193,7 @@ void CLogger::Error(string message, int error_code = 0)
 //+------------------------------------------------------------------+
 void CLogger::Fatal(string message, int error_code = 0)
 {
-   Log((ENUM_LOG_LEVEL)5, message, error_code);  // LOG_FATAL = 5
+   Log(LOG_FATAL, message, error_code);
 }
 
 //+------------------------------------------------------------------+

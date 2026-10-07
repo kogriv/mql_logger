@@ -29,9 +29,9 @@
 | [LOG-GAP-04](LOG-GAP-04-sqlite-handler.md) | SQLite: неверный счётчик, ошибки в пакетном режиме, медленная запись | A, C | закрыт | LOG-BL-03, LOG-BL-04 |
 | [LOG-GAP-05](LOG-GAP-05-tester-agents.md) | Журналы проходов тестера и агентов не собрать | B | открыт | LOG-BL-10 |
 | [LOG-GAP-06](LOG-GAP-06-record-time.md) | Время записи неточное, миллисекунды выдуманы | A | закрыт | LOG-BL-08 |
-| [LOG-GAP-07](LOG-GAP-07-core-and-factory.md) | Ядро и фабрика: потерянные записи, владение, имена | A, B | открыт | LOG-BL-06, LOG-BL-09 |
-| [LOG-GAP-08](LOG-GAP-08-docs-and-repo.md) | README расходится с кодом, в репозитории лишнее | D | открыт | LOG-BL-11 |
+| [LOG-GAP-07](LOG-GAP-07-core-and-factory.md) | Ядро и фабрика: потерянные записи, владение, имена | A, B | закрыт | LOG-BL-06, LOG-BL-09 |
+| [LOG-GAP-08](LOG-GAP-08-docs-and-repo.md) | README расходится с кодом, в репозитории лишнее | D | закрыт | LOG-BL-11 |
 | [LOG-GAP-09](LOG-GAP-09-formatters.md) | Форматтеры искажают сообщение | B | закрыт | LOG-BL-07 |
-| [LOG-GAP-10](LOG-GAP-10-filters.md) | «Regex»-фильтр не regex | D | открыт | LOG-BL-13 |
+| [LOG-GAP-10](LOG-GAP-10-filters.md) | «Regex»-фильтр не regex | D | закрыт | LOG-BL-13 |
 
 Номера находок `F-NN` — из [`../review/2026-10-07-audit.md`](../review/2026-10-07-audit.md).

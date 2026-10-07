@@ -1,619 +1,284 @@
-# Профессиональная система логирования для MQL5
+# mql_logger — журналирование для программ MQL5
 
-Полнофункциональная система логирования для MetaTrader 5 с модульной архитектурой, множественными обработчиками и расширенными возможностями фильтрации.
+Библиотека для советников, индикаторов и скриптов MetaTrader 5: уровни сообщений, вывод в журнал терминала,
+в файл и в базу SQLite, свой вид строки, отбор записей. Версия 2.0.0 — что изменилось, см. [`CHANGELOG.md`](CHANGELOG.md).
 
-## 🚀 Возможности
+- Выключенный уровень стоит одной проверки: строка сообщения не строится (0,01 мкс на вызов).
+- Запись в базу переживает критическую ошибку программы (`array out of range` и подобные).
+- Тесты: 55 случаев, `Tests/`.
 
-- **Модульная архитектура** - легкое добавление новых обработчиков и форматтеров
-- **Множественные обработчики** - консоль, файлы, база данных SQLite
-- **Гибкое форматирование** - простое и детальное форматирование сообщений
-- **Продвинутая фильтрация** - по уровню логирования и регулярным выражениям
-- **Thread-safety** - защита от конфликтов в псевдо-многопоточной среде MQL5
-- **Фабрика логгеров** - централизованное управление и конфигурация
-- **Удобные макросы** - быстрое логирование с автоматическим указанием источника
+## Установка
 
-## 📁 Структура проекта
+Папку библиотеки положить в `MQL5\Include\Logger` (или подключить git-сабмодулем), в программе:
 
-```
-Logger.mqh                     // Главный файл подключения
-├── Core/
-│   ├── LogRecord.mqh          // Структура лог-записи и уровни
-│   ├── Interfaces.mqh         // Интерфейсы системы
-│   ├── Logger.mqh             // Основной класс логгера
-│   └── Macros.mqh            // Макросы для быстрого логирования
-├── Handlers/
-│   ├── ConsoleHandler.mqh     // Вывод в терминал MetaTrader
-│   ├── FileHandler.mqh        // Запись в файлы
-│   └── SqliteHandler.mqh      // Запись в базу данных
-├── Formatters/
-│   ├── SimpleFormatter.mqh    // Простое форматирование
-│   └── DetailedFormatter.mqh  // Детальное форматирование
-├── Filters/
-│   ├── LevelFilter.mqh        // Фильтрация по уровню
-│   └── RegexFilter.mqh        // Фильтрация по содержимому
-└── Factory/
-    └── LoggerFactory.mqh      // Фабрика логгеров
+```mql5
+#include <Logger\Logger.mqh>
 ```
 
-## 🎯 Уровни логирования
+## Быстрый старт
 
-```cpp
-enum ENUM_LOG_LEVEL
-{
-   LOG_TRACE = 0,    // Детальная отладочная информация
-   LOG_DEBUG = 1,    // Отладочная информация
-   LOG_INFO = 2,     // Информационные сообщения
-   LOG_WARN = 3,     // Предупреждения
-   LOG_ERROR = 4,    // Ошибки
-   LOG_FATAL = 5     // Критические ошибки
-}
-```
+Полные примеры, которые собираются: [`Examples/QuickStart.mq5`](Examples/QuickStart.mq5) (скрипт) и
+[`Examples/ExpertSkeleton.mq5`](Examples/ExpertSkeleton.mq5) (каркас советника).
 
-## 🛠 Быстрый старт
-
-### 1. Базовое использование
-
-```cpp
-#include "Logger.mqh"
+```mql5
+#include <Logger\Logger.mqh>
 
 void OnStart()
 {
-   // Получить логгер по умолчанию
-   ILogger* logger = GetLogger();
-   
-   // Логирование разных уровней
-   logger.Info("Советник запущен");
-   logger.Warn("Внимание: низкий баланс");
-   logger.Error("Ошибка открытия позиции", GetLastError());
+   LOGINFO("Скрипт запущен на " + _Symbol);                 // логгер по умолчанию: журнал терминала, от INFO
+   LOGWARN(StringFormat("Спред %d пунктов", (int)SymbolInfoInteger(_Symbol, SYMBOL_SPREAD)));
+   ShutdownLogging();                                       // сбросить буферы, закрыть файлы и базы
 }
 ```
 
-### 2. Использование макросов (рекомендуется)
+В журнале терминала:
 
-```cpp
-#include "Logger.mqh"
-
-void OnTick()
-{
-   LOG_TRACE("Получен новый тик");
-   
-   double price = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-   LOG_INFO("Текущая цена: " + DoubleToString(price, _Digits));
-   
-   if(price < 1.0000)
-   {
-      LOG_WARN("Цена ниже критического уровня!");
-   }
-}
-
-void OnTradeTransaction(const MqlTradeTransaction& trans,
-                       const MqlTradeRequest& request,
-                       const MqlTradeResult& result)
-{
-   if(result.retcode != TRADE_RETCODE_DONE)
-   {
-      LOG_ERROR("Ошибка выполнения торговой операции");
-   }
-   else
-   {
-      LOG_INFO("Торговая операция выполнена успешно");
-   }
-}
+```
+2026.10.07 07:28:27 [INFO] default: Скрипт запущен на EURUSD [Script.mq5:5:OnStart]
 ```
 
-## 📝 Примеры конфигурации
+## Уровни
 
-### 1. Логгер только для консоли
+| Уровень | Значение | Для чего |
+|---|---|---|
+| `LOG_TRACE` | 0 | ход выполнения по шагам |
+| `LOG_DEBUG` | 1 | отладочные значения |
+| `LOG_INFO` | 2 | обычные события |
+| `LOG_WARN` | 3 | подозрительное, работа продолжается |
+| `LOG_ERROR` | 4 | ошибка |
+| `LOG_FATAL` | 5 | дальше работать нельзя |
 
-```cpp
-void CreateConsoleLogger()
-{
-   // Создать логгер для вывода в консоль
-   ILogger* logger = CLoggerFactory::CreateConsoleLogger("console", LOG_DEBUG);
-   
-   logger.Info("Сообщение в консоль");
-   logger.Debug("Отладочное сообщение");
-}
+Запись отсекается в трёх местах: уровень логгера (`SetLevel`, по умолчанию `INFO`), уровень обработчика
+(`SetLevel`, по умолчанию всё), фильтр обработчика.
+
+## Макросы
+
+Все макросы сначала проверяют уровень и только потом вычисляют сообщение, а в запись кладут файл, строку и
+функцию вызова.
+
+| Логгер `default` | По имени | По указателю | Уровень |
+|---|---|---|---|
+| `LOGTRACE(msg)` | `LOGTRACE_N("имя", msg)` | `LOGTRACE_TO(ptr, msg)` | TRACE |
+| `LOGDEBUG(msg)` | `LOGDEBUG_N` | `LOGDEBUG_TO` | DEBUG |
+| `LOGINFO(msg)` | `LOGINFO_N` | `LOGINFO_TO` | INFO |
+| `LOGWARN(msg)` | `LOGWARN_N` | `LOGWARN_TO` | WARN |
+| `LOGERROR(msg)` | `LOGERROR_N` | `LOGERROR_TO` | ERROR, код — `GetLastError()` |
+| `LOGFATAL(msg)` | `LOGFATAL_N` | `LOGFATAL_TO` | FATAL, код — `GetLastError()` |
+| `LOGERROR_CODE(msg, code)` | — | `LOGERROR_CODE_TO(ptr, msg, code)` | ERROR со своим кодом |
+| `LOGFATAL_CODE(msg, code)` | — | `LOGFATAL_CODE_TO(ptr, msg, code)` | FATAL со своим кодом |
+
+- `…_TO(ptr, …)` — основной способ в классах: указатель `ILogger*` (или `CLogger*`) хранится в поле; `NULL`
+  допустим — вызов ничего не делает.
+- `…_N("имя", …)` ищет логгер по имени на каждый вызов (5 мкс) — в часто вызываемом коде держите указатель.
+- Имена `LOG_INFO(...)` заняты значениями уровней, поэтому макросы пишутся слитно: `LOGINFO`.
+
+Ещё:
+
+```mql5
+LOGIF(spread > 30, LOG_WARN, "Широкий спред");            // условие, уровень, сообщение — логгер default
+LOGEXECUTION_TIME("Пересчёт", { Recalculate(); });        // выполнить и записать длительность (DEBUG)
+LOGFUNCTION_ENTRY();  LOGFUNCTION_EXIT();                 // TRACE: вход и выход из функции
+LOGTRADE_OPEN(_Symbol, ORDER_TYPE_BUY, 0.10, price);      // INFO: "Trade opened: EURUSD ORDER_TYPE_BUY 0.10 lots at 1.23450"
+LOGTRADE_CLOSE(_Symbol, 0.10, price, profit);
 ```
 
-### 2. Логгер для записи в файл
+Без макросов — методы логгера: `Trace`, `Debug`, `Info`, `Warn`, `Error(msg, code)`, `Fatal(msg, code)` и
+`Log(level, msg, code, file, line, func)`. Они сообщение получают уже построенным; чтобы не строить его зря —
+`if(logger.IsEnabled(LOG_DEBUG)) …` или макросы.
 
-```cpp
-void CreateFileLogger()
-{
-   // Создать логгер для записи в файл
-   ILogger* logger = CLoggerFactory::CreateFileLogger("trading", "trading.log", LOG_INFO);
-   
-   logger.Info("Запись в файл trading.log");
-   logger.Warn("Предупреждение в файле");
-   
-   // Принудительно сохранить в файл
-   logger.Flush();
-}
+## Логгеры и фабрика
+
+Логгеры создаёт и хранит `CLoggerFactory`; всё созданное через неё она же освобождает.
+
+```mql5
+CLogger* a = CLoggerFactory::GetLogger("orders");                          // найти или создать с конфигурацией по умолчанию
+CLogger* b = CLoggerFactory::CreateConsoleLogger("ui", LOG_DEBUG);         // журнал терминала
+CLogger* c = CLoggerFactory::CreateFileLogger("audit", "audit.log");       // файл
+CLogger* d = CLoggerFactory::CreateDatabaseLogger("trace", "trace.db", LOG_TRACE);   // база
+CLogger* e = CLoggerFactory::CreateCompositeLogger("ea", true, "ea.log", "ea.db");   // всё сразу
 ```
 
-### 3. Логгер с базой данных
+Своя конфигурация:
 
-```cpp
-void CreateDatabaseLogger()
-{
-   // Создать логгер для записи в SQLite
-   ILogger* logger = CLoggerFactory::CreateDatabaseLogger("db_logger", "logs.db", LOG_INFO);
-   
-   logger.Info("Запись в базу данных");
-   logger.Error("Ошибка в базе данных", 123);
-}
+```mql5
+SLoggerConfig config;
+config.level = LOG_DEBUG;
+config.console_output = true;
+config.file_output = true;        config.log_file = "ea.log";
+config.database_output = true;    config.database_file = "ea.db";
+config.db_auto_commit = true;     // база: запись сразу (по умолчанию) или пакетами по db_batch_size
+config.detailed_format = true;    // подробная строка в журнале и файле
+CLogger* logger = CLoggerFactory::CreateLogger("ea", config);
 ```
 
-### 4. Композитный логгер (несколько обработчиков)
+Правила:
 
-```cpp
-void CreateCompositeLogger()
-{
-   // Создать логгер с выводом в консоль и файл
-   ILogger* logger = CLoggerFactory::CreateCompositeLogger("multi", true, "app.log", "");
-   
-   logger.Info("Это сообщение появится и в консоли, и в файле");
-}
+- Имя: 1–50 знаков — латинские буквы, цифры, `_`, `-`, `.`. Недопустимое имя — `NULL` и одна строка в журнал
+  терминала.
+- Логгер с таким именем уже есть — возвращается он, новая конфигурация не применяется (повторный `OnInit` при
+  смене периода графика получает свой прежний логгер). Нужна другая — сначала `CLoggerFactory::RemoveLogger(имя)`.
+- `RemoveLogger` закрывает обработчики логгера (файл, базу), если ими не пользуется другой логгер.
+- `ShutdownLogging()` — всё сбросить и закрыть; после него логгеры создаются заново.
+- `CLoggerFactory::SetGlobalLevel(level)`, `EnableAll(bool)`, `FlushAll()` — для всех логгеров сразу.
+
+### Профили
+
+Готовые наборы для советника — уровень логгера равен наименьшему уровню его обработчиков:
+
+| Профиль | Журнал терминала | База `<имя>.db` | Для чего |
+|---|---|---|---|
+| `LOGGER_PROFILE_PERFORMANCE` | от WARN | нет | оптимизация: всё ниже WARN отсекается одной проверкой |
+| `LOGGER_PROFILE_PRODUCTION` | от WARN | от INFO | работа на графике |
+| `LOGGER_PROFILE_DEBUG` | от WARN | от TRACE | разбор поведения в одиночном тесте |
+
+```mql5
+input ENUM_LOGGER_PROFILE InpLogProfile = LOGGER_PROFILE_PERFORMANCE;
+...
+g_logger = CLoggerFactory::CreateProfileLogger("MyExpert", InpLogProfile);
 ```
 
-## 🎨 Настройка форматирования
+## Обработчики
 
-### 1. Простое форматирование
+Обработчик получает запись, проверяет свой уровень и фильтр и выводит её. К логгеру можно добавить несколько
+(`logger.AddHandler(handler)`).
 
-```cpp
-void SetupSimpleFormatter()
-{
-   ILogger* logger = CLoggerFactory::CreateLogger("formatted");
-   CConsoleHandler* handler = CLoggerFactory::CreateConsoleHandler();
-   
-   // Создать простой форматтер
-   CSimpleFormatter* formatter = CLoggerFactory::CreateSimpleFormatter(
-      "%timestamp% [%level%] %message%"
-   );
-   
-   handler.SetFormatter(formatter);
-   logger.AddHandler(handler);
-   
-   logger.Info("Сообщение с простым форматированием");
-}
+### Журнал терминала — `CConsoleHandler`
+
+`CLoggerFactory::CreateConsoleHandler(use_print = true, show_alerts = false)`; `show_alerts` — окно `Alert` для
+ERROR и FATAL.
+
+### Файл — `CFileHandler`
+
+```mql5
+CFileHandler* file = CLoggerFactory::CreateFileHandler("ea.log", /*append*/true, /*auto_flush*/false,
+                                                       /*common*/false, /*unicode*/false);
+file.SetMaxFileSize(5 * 1024 * 1024);   // ротация при 5 МБ
+file.SetMaxArchives(10);                // хранить 10 архивов
+file.SetFlushInterval(10);              // сброс буфера не реже раза в 10 с
 ```
 
-### 2. Детальное форматирование
+- Файл — в `MQL5\Files` программы (в тестере — в папке агента); `common = true` — общая папка терминалов.
+- Кодировка — UTF-8 без BOM; `unicode = true` — UTF-16. Журнал можно читать, пока программа работает.
+- `append = true` дописывает в существующий файл; `false` — начинает файл заново при первом открытии.
+- `auto_flush = true` — каждая запись сразу на диск; иначе буфер 8 КБ и сброс по интервалу, в `Flush()` и при
+  закрытии.
+- Ротация: `ea.log` → `ea.1.log`, `ea.2.log`, … (больше номер — новее); номера прошлых запусков не
+  перезаписываются.
+- Файл недоступен — одна строка в журнал терминала, повтор открытия раз в 5 с; сколько записей не сохранено —
+  `DroppedCount()`.
 
-```cpp
-void SetupDetailedFormatter()
-{
-   ILogger* logger = CLoggerFactory::CreateLogger("detailed");
-   CFileHandler* handler = CLoggerFactory::CreateFileHandler("detailed.log");
-   
-   // Создать детальный форматтер
-   CDetailedFormatter* formatter = CLoggerFactory::CreateDetailedFormatter(
-      "%timestamp% [%level%] %logger%: %message% %source_info% %error_info%",
-      false  // не многострочный формат
-   );
-   
-   handler.SetFormatter(formatter);
-   logger.AddHandler(handler);
-   
-   logger.Info("Детально отформатированное сообщение");
-}
+### База SQLite — `CSqliteHandler`
+
+```mql5
+CSqliteHandler* db = CLoggerFactory::CreateSqliteHandler("ea.db", "logs", /*auto_commit*/true, /*batch_size*/100);
 ```
 
-### 3. Многострочное форматирование
+| Режим | Время на запись | При критической ошибке программы |
+|---|---|---|
+| по записи (`auto_commit = true`, по умолчанию) | 0,15 мс | все записи в базе |
+| пакетами (`auto_commit = false`) | 0,04 мс | незакоммиченный хвост (до `batch_size` записей) теряется |
+| по записи + `SetDurable(true)` | 1,6 мс | все записи в базе, каждая дождалась диска |
 
-```cpp
-void SetupMultilineFormatter()
-{
-   ILogger* logger = CLoggerFactory::CreateLogger("multiline");
-   CConsoleHandler* handler = CLoggerFactory::CreateConsoleHandler();
-   
-   // Создать многострочный форматтер
-   CDetailedFormatter* formatter = CLoggerFactory::CreateDetailedFormatter("", true);
-   
-   handler.SetFormatter(formatter);
-   logger.AddHandler(handler);
-   
-   logger.Error("Многострочное сообщение об ошибке", 404);
-}
+- Коммит пакета — каждые `batch_size` записей, в `Flush()` и при закрытии.
+- Индексы при записи не создаются (с ними запись вдвое медленнее). Перед разбором большого журнала —
+  `db.SetCreateIndexes(true)` или запрос `CREATE INDEX`.
+- `GetRecordCount()`, `ClearOldRecords(days)`, `ExecuteQuery(sql)`, `FailedCount()`.
+
+Таблица (`logs`):
+
+| Столбец | Что |
+|---|---|
+| `id` | номер строки |
+| `ticktime`, `timestamp` | время сервера (последний тик; в тестере — время модели): текстом и секундами |
+| `time_local` | часы компьютера, секунды (в тестере — время модели) |
+| `elapsed_us` | микросекунды от запуска программы |
+| `seq` | номер записи в программе |
+| `level` | 0…5 |
+| `logger_name`, `message` | имя логгера, текст |
+| `source_file`, `source_line`, `function_name` | место вызова |
+| `error_code` | код ошибки |
+| `created_at` | время вставки по часам компьютера, UTC |
+| `thread_id` | всегда 0 |
+
+```sql
+-- ошибки и предупреждения последнего запуска
+SELECT ticktime, level, message, source_file, source_line, error_code FROM logs WHERE level >= 3 ORDER BY id;
+-- где программа проводит время: промежутки между соседними записями
+SELECT id, message, elapsed_us - LAG(elapsed_us) OVER (ORDER BY id) AS gap_us FROM logs ORDER BY gap_us DESC LIMIT 20;
 ```
 
-## 🔍 Фильтрация сообщений
+## Вид строки
 
-### 1. Фильтрация по уровню
+Без форматтера журнал и файл получают:
 
-```cpp
-void SetupLevelFilter()
-{
-   ILogger* logger = CLoggerFactory::CreateLogger("filtered");
-   CConsoleHandler* handler = CLoggerFactory::CreateConsoleHandler();
-   
-   // Показывать только предупреждения и ошибки
-   CLevelFilter* filter = CLoggerFactory::CreateLevelFilter(LOG_WARN);
-   handler.SetFilter(filter);
-   
-   logger.AddHandler(handler);
-   
-   logger.Debug("Это сообщение НЕ появится");
-   logger.Info("Это сообщение НЕ появится");
-   logger.Warn("Это предупреждение ПОЯВИТСЯ");
-   logger.Error("Эта ошибка ПОЯВИТСЯ");
-}
+```
+время_сервера [УРОВЕНЬ] имя_логгера: текст [файл:строка:функция] [Error: код]
 ```
 
-### 2. Фильтрация по содержимому
+Части в скобках появляются, когда место вызова и код заданы. Свой вид — форматтер с шаблоном:
 
-```cpp
-void SetupRegexFilter()
-{
-   ILogger* logger = CLoggerFactory::CreateLogger("regex_filtered");
-   CFileHandler* handler = CLoggerFactory::CreateFileHandler("trades_only.log");
-   
-   // Записывать только сообщения о торговых операциях
-   CRegexFilter* filter = CLoggerFactory::CreateRegexFilter(false); // без учета регистра
-   filter.AddTradePatterns(); // добавить стандартные торговые паттерны
-   filter.AddIncludePattern("ордер");
-   filter.AddIncludePattern("позиция");
-   
-   handler.SetFilter(filter);
-   logger.AddHandler(handler);
-   
-   logger.Info("Открыт ордер BUY"); // Запишется
-   logger.Info("Закрыта позиция SELL"); // Запишется  
-   logger.Info("Проверка соединения"); // НЕ запишется
-}
+```mql5
+handler.SetFormatter(CLoggerFactory::CreateSimpleFormatter("%elapsed% %level% %logger%: %message% %error_info%"));
+handler.SetFormatter(CLoggerFactory::CreateDetailedFormatter());            // уровень выровнен, место вызова и код
+handler.SetFormatter(CLoggerFactory::CreateDetailedFormatter("", true));    // многострочный
 ```
 
-## 📊 Продвинутые возможности
+| Поле | Значение |
+|---|---|
+| `%timestamp%` | время сервера (последний тик; в тестере — модели), до секунды |
+| `%localtime%` | часы компьютера, до секунды |
+| `%elapsed%` | секунды от запуска программы, 6 знаков после точки |
+| `%seq%` | номер записи в программе |
+| `%level%` | уровень |
+| `%logger%` | имя логгера |
+| `%message%` | текст — вставляется как есть |
+| `%file%`, `%line%`, `%function%` | место вызова по частям |
+| `%source_info%` | `[файл:строка:функция]`, пусто без места вызова |
+| `%error%` | код ошибки, пусто при 0 |
+| `%error_code%` | код ошибки всегда |
+| `%error_info%` | `[Error: код]`, пусто при 0 |
 
-### 1. Настройка авто-сброса
+Пустое поле забирает с собой один соседний пробел шаблона. Неизвестное `%имя%` остаётся в строке. Часов
+компьютера с миллисекундами в MQL5 нет — промежутки меряйте по `%elapsed%`.
 
-```cpp
-void SetupAutoFlush()
-{
-   ILogger* logger = CLoggerFactory::CreateLogger("auto_flush");
-   
-   // Автоматически сбрасывать буферы каждые 30 секунд
-   logger.SetAutoFlushInterval(30);
-   
-   CFileHandler* handler = CLoggerFactory::CreateFileHandler("auto_flush.log", true, false);
-   logger.AddHandler(handler);
-   
-   logger.Info("Это сообщение будет автоматически сохранено через 30 секунд");
-}
+## Фильтры
+
+```mql5
+CLevelFilter* levels = CLoggerFactory::CreateLevelFilter(LOG_DEBUG);
+levels.SetLevelRange(LOG_DEBUG, LOG_INFO);     // только DEBUG и INFO
+levels.ExcludeLevel(LOG_DEBUG);                // кроме DEBUG
+handler.SetFilter(levels);
+
+CSubstringFilter* text = CLoggerFactory::CreateSubstringFilter(/*case_sensitive*/false);
+text.AddIncludePattern("order");               // пропускать записи со словом order
+text.AddExcludePattern("heartbeat");           // исключение сильнее включения
+handler.SetFilter(text);
 ```
 
-### 2. Ротация файлов по размеру
+`CSubstringFilter` ищет подстроку, не регулярное выражение. `CLevelFilter` нужен для диапазона и исключений;
+простой нижний порог — `handler.SetLevel(...)`. У обработчика один фильтр.
 
-```cpp
-void SetupFileRotation()
-{
-   ILogger* logger = CLoggerFactory::CreateLogger("rotating");
-   CFileHandler* handler = CLoggerFactory::CreateFileHandler("rotating.log");
-   
-   // Ротировать файл при достижении 1MB
-   handler.SetMaxFileSize(1024 * 1024);
-   
-   logger.AddHandler(handler);
-   
-   for(int i = 0; i < 10000; i++)
-   {
-      logger.Info("Сообщение номер " + IntegerToString(i));
-   }
-}
-```
+## В тестере и на агентах
 
-### 3. Пакетная запись в базу данных
+- Файлы и базы пишутся в `MQL5\Files` агента (`Tester\Agent-…\MQL5\Files`); на удалённом агенте они остаются на
+  его машине. Сбор журналов проходов — в работе (`docs/backlog/LOG-BL-10`).
+- Для оптимизации — профиль `PERFORMANCE` и макросы: вызов ниже WARN стоит 0,01 мкс.
+- Время в записях — время модели.
 
-```cpp
-void SetupBatchDatabase()
-{
-   CSqliteHandler* handler = CLoggerFactory::CreateSqliteHandler("batch.db", "logs");
-   
-   // Записывать в базу пакетами по 50 записей
-   handler.SetBatchSize(50);
-   handler.SetAutoCommit(false);
-   
-   ILogger* logger = CLoggerFactory::CreateLogger("batch");
-   logger.AddHandler(handler);
-   
-   // Эти сообщения будут записаны одним пакетом
-   for(int i = 0; i < 100; i++)
-   {
-      logger.Info("Пакетное сообщение " + IntegerToString(i));
-   }
-   
-   logger.Flush(); // Принудительно записать оставшиеся
-}
-```
+## Как это выполняется
 
-## 🎯 Специальные макросы
+Программа MQL5 выполняется в одном потоке, обработчики событий (`OnTick`, `OnTimer`, …) — по очереди, поэтому
+блокировок в библиотеке нет. Обработчик, форматтер или фильтр может сам писать в логгер — такие вложенные записи
+доставляются; цепочка глубже 4 обрывается, оборванные записи считает `logger.DroppedCount()`.
 
-### 1. Макросы для торговых операций
+`_LastError` библиотека не сбрасывает и при успешной записи не меняет.
 
-```cpp
-void TradeExample()
-{
-   string symbol = "EURUSD";
-   double volume = 0.1;
-   double price = 1.1234;
-   double profit = 15.50;
-   
-   // Логирование открытия сделки
-   LOG_TRADE_OPEN(symbol, ORDER_TYPE_BUY, volume, price);
-   
-   // Логирование закрытия сделки
-   LOG_TRADE_CLOSE(symbol, volume, price, profit);
-}
-```
+## Тесты
 
-### 2. Макросы для отладки производительности
+`Tests/LoggerTests.mqh` — все случаи одним скриптом: подключите его из скрипта в папке `Scripts` терминала
+(`#include <Logger\Tests\LoggerTests.mqh>`) и запустите; в журнале — строки «… passed / failed» и итог
+«N of M passed». Файлы тестов (`lgt_*` в `MQL5\Files`) удаляются.
 
-```cpp
-void PerformanceExample()
-{
-   // Измерить время выполнения блока кода
-   LOG_EXECUTION_TIME("Расчет индикаторов", {
-      // Здесь ваш код для измерения
-      for(int i = 0; i < 1000; i++)
-      {
-         MathSin(i * 0.01);
-      }
-   });
-}
-```
+## Документы
 
-### 3. Макросы входа/выхода из функций
-
-```cpp
-void ExampleFunction()
-{
-   LOG_FUNCTION_ENTRY(); // Логировать вход в функцию
-   
-   // Ваш код функции
-   Sleep(100);
-   
-   LOG_FUNCTION_EXIT();  // Логировать выход из функции
-}
-```
-
-### 4. Условное логирование
-
-```cpp
-void ConditionalLogging()
-{
-   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
-   
-   // Логировать только при низком балансе
-   LOG_IF(balance < 1000, LOG_WARN, "Низкий баланс: " + DoubleToString(balance, 2));
-}
-```
-
-## 🏭 Использование фабрики логгеров
-
-### 1. Настройка конфигурации по умолчанию
-
-```cpp
-void SetupDefaultConfig()
-{
-   SLoggerConfig config;
-   config.level = LOG_DEBUG;
-   config.console_output = true;
-   config.file_output = true;
-   config.log_file = "default.log";
-   config.detailed_format = true;
-   config.auto_flush = false;
-   config.flush_interval = 60;
-   
-   CLoggerFactory::SetDefaultConfig(config);
-   
-   // Теперь все новые логгеры будут использовать эту конфигурацию
-   ILogger* logger = GetLogger("test");
-}
-```
-
-### 2. Управление всеми логгерами
-
-```cpp
-void ManageAllLoggers()
-{
-   // Сбросить все буферы всех логгеров
-   FlushAllLoggers();
-   
-   // Установить уровень для всех логгеров
-   CLoggerFactory::SetGlobalLevel(LOG_WARN);
-   
-   // Включить/выключить все логгеры
-   CLoggerFactory::EnableAll(false);
-   
-   // Узнать количество созданных логгеров
-   int count = CLoggerFactory::GetLoggerCount();
-   Print("Создано логгеров: " + IntegerToString(count));
-   
-   // Корректное завершение работы
-   ShutdownLogging();
-}
-```
-
-## 🛡 Thread Safety
-
-Система автоматически обеспечивает thread-safety для MQL5:
-
-```cpp
-void MultiEventExample()
-{
-   // Эти вызовы из разных событий безопасны
-   void OnTick()
-   {
-      LOG_INFO("Тик получен в OnTick");
-   }
-   
-   void OnTimer()
-   {
-      LOG_INFO("Таймер сработал в OnTimer");
-   }
-   
-   void OnTrade()
-   {
-      LOG_INFO("Торговое событие в OnTrade");
-   }
-}
-```
-
-## 📋 Полный пример в советнике
-
-```cpp
-//+------------------------------------------------------------------+
-//|                                                   MyExpert.mq5 |
-//+------------------------------------------------------------------+
-#include "Logger.mqh"
-
-input ENUM_LOG_LEVEL LogLevel = LOG_INFO;  // Уровень логирования
-
-ILogger* g_logger = NULL;
-
-//+------------------------------------------------------------------+
-//| Expert initialization function                                   |
-//+------------------------------------------------------------------+
-int OnInit()
-{
-   // Настроить логгер
-   SLoggerConfig config;
-   config.level = LogLevel;
-   config.console_output = true;
-   config.file_output = true;
-   config.log_file = "MyExpert.log";
-   config.detailed_format = true;
-   
-   g_logger = CLoggerFactory::CreateLogger("MyExpert", config);
-   
-   if(g_logger == NULL)
-   {
-      Print("Ошибка создания логгера");
-      return INIT_FAILED;
-   }
-   
-   LOG_INFO("Советник MyExpert инициализирован");
-   return INIT_SUCCEEDED;
-}
-
-//+------------------------------------------------------------------+
-//| Expert tick function                                             |
-//+------------------------------------------------------------------+
-void OnTick()
-{
-   LOG_EXECUTION_TIME("Обработка тика", {
-      
-      double price = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-      LOG_DEBUG("Текущая цена: " + DoubleToString(price, _Digits));
-      
-      // Проверка условий для торговли
-      if(ShouldOpenTrade())
-      {
-         if(OpenTrade())
-         {
-            LOG_INFO("Сделка открыта успешно");
-         }
-         else
-         {
-            LOG_ERROR("Ошибка открытия сделки");
-         }
-      }
-   });
-}
-
-//+------------------------------------------------------------------+
-//| Expert deinitialization function                                |
-//+------------------------------------------------------------------+
-void OnDeinit(const int reason)
-{
-   LOG_INFO("Советник завершает работу. Причина: " + IntegerToString(reason));
-   
-   // Сохранить все логи
-   FlushAllLoggers();
-   
-   // Корректно завершить работу логгера
-   ShutdownLogging();
-}
-
-//+------------------------------------------------------------------+
-//| Trade function                                                   |
-//+------------------------------------------------------------------+
-void OnTradeTransaction(const MqlTradeTransaction& trans,
-                       const MqlTradeRequest& request,
-                       const MqlTradeResult& result)
-{
-   if(result.retcode == TRADE_RETCODE_DONE)
-   {
-      LOG_TRADE_OPEN(_Symbol, request.type, request.volume, result.price);
-   }
-   else
-   {
-      LOG_ERROR_CODE("Ошибка торговой операции", result.retcode);
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Auxiliary functions                                              |
-//+------------------------------------------------------------------+
-bool ShouldOpenTrade()
-{
-   LOG_FUNCTION_ENTRY();
-   
-   // Ваша логика определения сигнала
-   bool signal = true;
-   
-   LOG_IF(signal, LOG_DEBUG, "Сигнал для открытия сделки найден");
-   
-   LOG_FUNCTION_EXIT();
-   return signal;
-}
-
-bool OpenTrade()
-{
-   LOG_FUNCTION_ENTRY();
-   
-   MqlTradeRequest request = {};
-   MqlTradeResult result = {};
-   
-   request.action = TRADE_ACTION_DEAL;
-   request.symbol = _Symbol;
-   request.volume = 0.1;
-   request.type = ORDER_TYPE_BUY;
-   request.price = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-   
-   bool success = OrderSend(request, result);
-   
-   if(success)
-   {
-      LOG_INFO("Запрос на открытие сделки отправлен");
-   }
-   else
-   {
-      LOG_ERROR("Ошибка отправки торгового запроса", GetLastError());
-   }
-   
-   LOG_FUNCTION_EXIT();
-   return success;
-}
-```
-
-## 🔧 Установка и использование
-
-1. Скопируйте файлы логгера в рабочую папку вашего MetaTrader 5
-2. В вашем коде добавьте: `#include "Logger.mqh"`
-3. Используйте макросы `LOG_INFO()`, `LOG_ERROR()` и другие для быстрого логирования
-4. Или создайте настроенный логгер через `CLoggerFactory`
-
-## 📚 Дополнительные возможности
-
-- **Очистка старых записей**: `handler.ClearOldRecords(30)` - удалить записи старше 30 дней
-- **Подсчет записей**: `handler.GetRecordCount()` - получить количество записей в БД
-- **Настройка буферизации**: `handler.SetFlushInterval(120)` - сбрасывать каждые 2 минуты
-- **Исключение уровней**: `filter.ExcludeLevel(LOG_DEBUG)` - исключить отладочные сообщения
-
----
-
-**Автор**: kogriv  
-**Версия**: 1.0.0  
-**Совместимость**: MetaTrader 5, MQL5
+[`docs/`](docs/README.md): устройство (`design/architecture.md`), проекты изменений, разбор кода, пробелы и бэклог.

@@ -6,7 +6,6 @@
 #property copyright "Copyright 2025, kogriv"
 #property link      "https://www.mql5.com/ru/users/kogriv"
 #property version   "1.00"
-#property strict
 
 //+------------------------------------------------------------------+
 //| Main include file for the logging system                        |
@@ -30,6 +29,7 @@
 
 // Filters
 #include "Filters\LevelFilter.mqh"
+#include "Filters\SubstringFilter.mqh"
 #include "Filters\RegexFilter.mqh"
 
 // Factory
@@ -41,10 +41,10 @@
 //+------------------------------------------------------------------+
 //| Logger system version information                               |
 //+------------------------------------------------------------------+
-#define LOGGER_VERSION_MAJOR    1
+#define LOGGER_VERSION_MAJOR    2
 #define LOGGER_VERSION_MINOR    0
 #define LOGGER_VERSION_BUILD    0
-#define LOGGER_VERSION_STRING   "1.0.0"
+#define LOGGER_VERSION_STRING   "2.0.0"
 
 //+------------------------------------------------------------------+
 //| Easy access functions                                            |
