@@ -337,3 +337,7 @@ SELECT line FROM pass_lines WHERE pass = 3 ORDER BY n;
 ## Документы
 
 [`docs/`](docs/README.md): устройство (`design/architecture.md`), проекты изменений, разбор кода, пробелы и бэклог.
+
+## Лицензия
+
+[MIT](LICENSE). Окончания строк в репозитории — LF (`.gitattributes`); MetaEditor собирает такие файлы без изменений.

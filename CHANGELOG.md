@@ -70,6 +70,8 @@
 - `CreateProfileLogger(name, profile, db_file)`, `CLoggerFactory::RunFileName()`, `CSqliteHandler::Clear()`.
 - Тесты `Tests/` (60 случаев; пример `QuickStart` выполняется в них), примеры `Examples/`, документы `docs/`.
 
+- Лицензия MIT (`LICENSE`); окончания строк закреплены: LF (`.gitattributes`).
+
 ### Удалено
 
 - `Tests/LoggerTest.mq5`, `Tests/LogTest.mq5`, `LoggerTest.mq5` в корне (демонстрации без проверок), `.ex5`,
